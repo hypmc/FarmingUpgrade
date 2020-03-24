@@ -1,0 +1,18 @@
+plugins {
+    id 'java'
+}
+
+group 'no.hyp'
+version '1.0.0'
+
+sourceCompatibility = 1.8
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+dependencies {
+    compileOnly 'org.spigotmc:spigot-api:1.15.1-R0.1-SNAPSHOT'
+    testCompile group: 'junit', name: 'junit', version: '4.12'
+}
