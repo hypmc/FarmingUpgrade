@@ -1,12 +1,15 @@
 package no.hyp.farmingupgrade;
 
+import com.google.common.collect.Lists;
 import org.bukkit.*;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
 import org.bukkit.block.data.Ageable;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.block.data.type.Farmland;
+import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.*;
@@ -16,9 +19,15 @@ import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 
 public class FarmingUpgrade extends JavaPlugin implements Listener {
+
+    private Thread watcherThread;
+
+    private Path path;
 
     private Random random;
 
@@ -27,10 +36,25 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
      */
     private Map<Material, Integer> toolMaterials;
 
-    private Set<Material> cropMaterials;
+    private Map<Material, CropType> cropMaterials;
+
+    private final String CONFIGURATION_TRAMPLE_CROPS = "trampleCrops";
+
+    private final String CONFIGURATION_HYDRATION_UPGRADE = "hydrationUpgrade";
+
+    private final String CONFIGURATION_HYDRATION_RANGE = "hydrationRange";
+
+    private final String CONFIGURATION_HYDRATION_DEPTH = "hydrationDepth";
+
+    private final String CONFIGURATION_DRY_FARMLAND = "dryFarmland";
+
+    private final String CONFIGURATION_HOE_UPGRADE = "hoeUpgrade";
+
+    private final String CONFIGURATION_HOE_REPLANT = "hoeReplant";
 
     @Override
     public void onEnable() {
+        this.saveDefaultConfig();
         this.getServer().getPluginManager().registerEvents(this, this);
 
         random = new Random();
@@ -42,39 +66,113 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
         toolMaterials.put(Material.IRON_HOE, 1);
         toolMaterials.put(Material.DIAMOND_HOE, 2);
 
-        cropMaterials = new HashSet<>();
-        cropMaterials.add(Material.BEETROOTS);
-        cropMaterials.add(Material.CARROTS);
-        cropMaterials.add(Material.NETHER_WART);
-        cropMaterials.add(Material.POTATOES);
-        cropMaterials.add(Material.WHEAT);
+        cropMaterials = new HashMap<>();
+        cropMaterials.put(Material.BEETROOTS, new CropType(Material.BEETROOTS, Material.BEETROOT_SEEDS));
+        cropMaterials.put(Material.CARROTS, new CropType(Material.CARROTS, Material.CARROT));
+        cropMaterials.put(Material.NETHER_WART, new CropType(Material.NETHER_WART, Material.NETHER_WART));
+        cropMaterials.put(Material.POTATOES, new CropType(Material.POTATOES, Material.POTATO));
+        cropMaterials.put(Material.WHEAT, new CropType(Material.WHEAT, Material.WHEAT_SEEDS));
 
+        this.path = Paths.get(this.getDataFolder().getPath());
+        configurationWatcherEnable();
         super.onEnable();
     }
 
     @Override
     public void onDisable() {
+        configurationWatcherDisable();
         super.onDisable();
     }
 
     /**
+     * Start/restart the configuration watcher thread.
+     */
+    public void configurationWatcherEnable() {
+        //
+        this.configurationWatcherDisable();
+        this.watcherThread = new Thread(new ConfigurationWatcher(this, this.path));
+        this.watcherThread.start();
+    }
+
+    /**
+     * Stop the configuration watcher thread.
+     */
+    public void configurationWatcherDisable() {
+        if (this.watcherThread != null) {
+            this.watcherThread.interrupt();
+        }
+    }
+
+    /**
      * A PlayerInteractEvent is called for Farmland when it is trampled by a player. The result of this
-     * event is to call a BlockFadeEvent afterwards, therefore we will not cancel it
+     * event is to call a BlockFadeEvent afterwards.
      *
      * @param e
      */
-    @EventHandler(priority = EventPriority.MONITOR)
+    @EventHandler(priority = EventPriority.LOWEST)
     public void onFarmlandTrample(PlayerInteractEvent e) {
-        Player p;
-        if (!e.isCancelled()) {
-            Block block = e.getClickedBlock();
-            if (block != null && e.getClickedBlock().getType() == Material.FARMLAND && e.getAction() == Action.PHYSICAL) {
-                Block crop = block.getRelative(0, 1, 0);
-                if (cropMaterials.contains(crop.getType())) {
-                    crop.getWorld().spawnParticle(Particle.BLOCK_CRACK, crop.getLocation().add(0.5, 0.5, 0.5), 200, crop.getBlockData());
-                    crop.getWorld().playSound(crop.getLocation().add(0.5, 0.5, 0.5), Sound.BLOCK_CROP_BREAK, 1, 1);
-                    crop.setType(crop.getType());
+        if (!(e instanceof UpgradedPlayerInteractEvent)) {
+            Block farmland = e.getClickedBlock();
+            if (farmland != null && e.getClickedBlock().getType() == Material.FARMLAND && e.getAction() == Action.PHYSICAL) {
+                // Cancel to handle manually.
+                e.setUseInteractedBlock(Event.Result.DENY);
+                // Trample crops or trample Farmland.
+                if (this.getConfig().getBoolean(CONFIGURATION_TRAMPLE_CROPS, true)) {
+                    // Trample the crop above the farmland.
+                    Block crop = farmland.getRelative(0, 1, 0);
+                    if (cropMaterials.containsKey(crop.getType())) {
+                        // Send an InteractEvent for the trampled crop.
+                        UpgradedPlayerInteractEvent trampleEvent = new UpgradedPlayerInteractEvent(e.getPlayer(), e.getAction(), e.getItem(), crop, e.getBlockFace());
+                        this.getServer().getPluginManager().callEvent(trampleEvent);
+                        if (trampleEvent.useInteractedBlock() == Event.Result.ALLOW) {
+                            // Calculate the state of the crop after being trampled.
+                            BlockState oldState = crop.getState();
+                            BlockState state = crop.getState();
+                            state.setType(Material.AIR);
+                            state.setType(crop.getType());
+                            // Send a BlockFadeEvent to indicate the crop being reset.
+                            UpgradedBlockFadeEvent fadeEvent = new UpgradedBlockFadeEvent(crop, state);
+                            this.getServer().getPluginManager().callEvent(fadeEvent);
+                            if (!fadeEvent.isCancelled()) {
+                                state.update(true);
+                                breakBlockEffect(crop, oldState, Sound.BLOCK_CROP_BREAK);
+                            }
+                        }
+                    }
+                } else {
+                    // Send an InteractEvent for the trampled Farmland.
+                    UpgradedPlayerInteractEvent trampleEvent = new UpgradedPlayerInteractEvent(e.getPlayer(), e.getAction(), e.getItem(), farmland, e.getBlockFace());
+                    this.getServer().getPluginManager().callEvent(trampleEvent);
+                    if (trampleEvent.useInteractedBlock() == Event.Result.ALLOW) {
+                        // Calculate the state of the Farmland after being trampled.
+                        BlockState state = farmland.getState();
+                        state.setType(Material.DIRT);
+                        // Send a BlockFadeEvent to indicate the Farmland turning to Dirt.
+                        UpgradedBlockFadeEvent fadeEvent = new UpgradedBlockFadeEvent(farmland, state);
+                        this.getServer().getPluginManager().callEvent(fadeEvent);
+                        if (!fadeEvent.isCancelled()) {
+                            // Move the player up from the Farmland so they do not get stuck in the Dirt.
+                            Player player = e.getPlayer();
+                            Location location = player.getLocation();
+                            Location blockLocation = farmland.getRelative(0, 1, 0).getLocation();
+                            if (location.getY() < blockLocation.getY()) {
+                                location.setY(blockLocation.getY());
+                                player.teleport(location);
+                            }
+                            state.update(true);
+                        }
+                    }
                 }
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onCropGrow(BlockGrowEvent e) {
+        if (!e.isCancelled()) {
+            Block below = e.getBlock().getRelative(0, -1, 0);
+            if (below.getType() == Material.FARMLAND) {
+                farmlandUpgradedChangeMoisture(below);
             }
         }
     }
@@ -90,12 +188,19 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
     public void onFarmlandDry(BlockFadeEvent e) {
         if (!(e instanceof UpgradedBlockFadeEvent)) {
             // Check that the fading block is farmland.
-            Block block = e.getBlock();
-            if (block.getType() == Material.FARMLAND) {
-                Block above = block.getRelative(0, 1, 0);
-                if (cropMaterials.contains(above.getType()) || above.getType() == Material.AIR) {
+            Block farmland = e.getBlock();
+            if (farmland.getType() == Material.FARMLAND) {
+                // Check if using upgraded hydration mechanics.
+                if (this.getConfig().getBoolean(CONFIGURATION_HYDRATION_UPGRADE, true)) {
                     e.setCancelled(true);
-                    farmlandChangeMoisture(block);
+                    farmlandUpgradedChangeMoisture(farmland);
+                } else {
+                    Block above = farmland.getRelative(0, 1, 0);
+                    if (!configDryFarmland()) {
+                        if (cropMaterials.containsKey(above.getType()) || above.getType() == Material.AIR) {
+                            e.setCancelled(true);
+                        }
+                    }
                 }
             }
         }
@@ -108,31 +213,30 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
      * @param e
      */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarmlandDry(MoistureChangeEvent e) {
+    public void onFarmlandMoistureChange(MoistureChangeEvent e) {
         if (!(e instanceof UpgradedMoistureChangeEvent)) {
-            Block block = e.getBlock();
-            if (block.getType() == Material.FARMLAND) {
-                Block above = block.getRelative(0, 1, 0);
-                if (cropMaterials.contains(above.getType()) || above.getType() == Material.AIR) {
+            if (this.getConfig().getBoolean(CONFIGURATION_HYDRATION_UPGRADE, true)) {
+                Block block = e.getBlock();
+                if (block.getType() == Material.FARMLAND) {
                     e.setCancelled(true);
-                    farmlandChangeMoisture(block);
+                    farmlandUpgradedChangeMoisture(block);
                 }
             }
         }
     }
 
-    public void farmlandChangeMoisture(Block block) {
-        if (block.getType() == Material.FARMLAND) {
-            BlockState state = block.getState();
-            determineMoisture(state);
+    public void farmlandUpgradedChangeMoisture(Block farmland) {
+        if (farmland.getType() == Material.FARMLAND) {
+            BlockState state = farmland.getState();
+            farmlandDetermineUpgradedMoisture(state);
             if (state.getType() == Material.FARMLAND) {
-                UpgradedMoistureChangeEvent event = new UpgradedMoistureChangeEvent(block, state);
+                UpgradedMoistureChangeEvent event = new UpgradedMoistureChangeEvent(farmland, state);
                 this.getServer().getPluginManager().callEvent(event);
                 if (!event.isCancelled()) {
                     state.update(true);
                 }
             } else {
-                UpgradedBlockFadeEvent event = new UpgradedBlockFadeEvent(block, state);
+                UpgradedBlockFadeEvent event = new UpgradedBlockFadeEvent(farmland, state);
                 this.getServer().getPluginManager().callEvent(event);
                 if (!event.isCancelled()) {
                     state.update(true);
@@ -141,10 +245,13 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
         }
     }
 
-    public void determineMoisture(BlockState state) {
+    public void farmlandDetermineUpgradedMoisture(BlockState state) {
         Material aboveType = state.getBlock().getRelative(0, 1, 0).getType();
-        if (aboveType == Material.AIR || cropMaterials.contains(aboveType)) {
-            if (isHydrated(state.getBlock(), 4, 0, -2)) {
+        if (aboveType == Material.AIR || cropMaterials.containsKey(aboveType)) {
+            ConfigurationSection configuration = this.getConfig();
+            int range = configuration.getInt(CONFIGURATION_HYDRATION_RANGE, 4);
+            int depth = configuration.getInt(CONFIGURATION_HYDRATION_DEPTH, 2);
+            if (isHydrated(state.getBlock(), range, 0, -depth)) {
                 BlockData data = state.getBlockData();
                 Farmland farmland = (Farmland) data;
                 farmland.setMoisture(Math.min(farmland.getMoisture() + 1, farmland.getMaximumMoisture()));
@@ -152,8 +259,10 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
             } else {
                 BlockData data = state.getBlockData();
                 Farmland farmland = (Farmland) data;
-                if (farmland.getMoisture() == 0) {
-                    //state.setType(Material.DIRT);
+                if (farmland.getMoisture() <= 0) {
+                    if (configDryFarmland()) {
+                        state.setType(Material.DIRT);
+                    }
                 } else {
                     farmland.setMoisture(Math.max(farmland.getMoisture() - 1, 0));
                     state.setBlockData(data);
@@ -371,54 +480,99 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFarm(BlockBreakEvent e) {
-        if (!(e instanceof UpgradedBlockBreakEvent)) {
-            Player player = e.getPlayer();
-            Block block = e.getBlock();
-            // Handle breaking of crops.
-            if (cropMaterials.contains(block.getType())) {
-                ItemStack tool = player.getInventory().getItemInMainHand();
-                // If broken by a hoe, all crops within range are harvested and automatically replanted.
-                if (toolMaterials.containsKey(tool.getType())) {
-                    e.setCancelled(true);
-                    // Calculate the radius of the hoe sweep.
-                    // Radius is affected by hoe material and the Efficiency enchantment (1 radius per 2 levels).
-                    int range = Math.min(7, toolMaterials.get(tool.getType()) + tool.getEnchantmentLevel(Enchantment.DIG_SPEED) / 2);
-                    // Get the adjacent crops in range.
-                    Set<Block> adjacentCrops = new HashSet<>();
-                    adjacentCrops.add(block);
-                    int radius = 1;
-                    while (radius <= range) {
-                        adjacentCrops.addAll(findRadiallyAdjacentMaterials(cropMaterials, block, radius));
-                        radius++;
-                    }
-                    // For every crop block, simulate a BlockBreakEvent for other plugins to react to.
-                    for (Block crop : adjacentCrops) {
-                        // Only break crops that are fully grown.
-                        Optional<Boolean> grown = isGrown(crop);
-                        if (grown.isPresent() && grown.get() == true) {
-                            // Call an event that is handled by the plugin.
-                            UpgradedBlockBreakEvent sweepEvent = new UpgradedBlockBreakEvent(crop, player);
-                            this.getServer().getPluginManager().callEvent(sweepEvent);
-                            if (!sweepEvent.isCancelled()) {
-                                // Get the state of the crop before it is broken, and drop.
-                                BlockState state = crop.getState();
-                                // Send a drop event indicating the dropped items.
-                                // TODO: Maybe call BlockDropItemEvent here.
-                                if (player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE) {
-                                    crop.breakNaturally(tool);
-                                    damageTool(player, tool, 1);
-                                } else {
+        if (this.getConfig().getBoolean(CONFIGURATION_HOE_UPGRADE, true)) {
+            if (!(e instanceof UpgradedBlockBreakEvent)) {
+                Player player = e.getPlayer();
+                Block block = e.getBlock();
+                // Handle breaking of crops.
+                if (cropMaterials.containsKey(block.getType())) {
+                    ItemStack tool = player.getInventory().getItemInMainHand();
+                    // If broken by a hoe, all crops within range are harvested and automatically replanted.
+                    if (toolMaterials.containsKey(tool.getType())) {
+                        e.setCancelled(true);
+                        // Calculate the radius of the hoe sweep.
+                        // Radius is affected by hoe material and the Efficiency enchantment (1 radius per 2 levels).
+                        int range = Math.min(7, toolMaterials.get(tool.getType()) + tool.getEnchantmentLevel(Enchantment.DIG_SPEED) / 2);
+                        // Get the adjacent crops in range.
+                        Set<Block> adjacentCrops = new HashSet<>();
+                        adjacentCrops.add(block);
+                        int radius = 1;
+                        while (radius <= range) {
+                            adjacentCrops.addAll(findRadiallyAdjacentMaterials(cropMaterials.keySet(), block, radius));
+                            radius++;
+                        }
+                        // For every crop block, simulate a BlockBreakEvent for other plugins to react to.
+                        for (Block crop : adjacentCrops) {
+                            // Only break crops that are fully grown.
+                            Optional<Boolean> grown = isGrown(crop);
+                            if (grown.isPresent() && grown.get() == true) {
+                                // Call an event that is handled by the plugin.
+                                UpgradedBlockBreakEvent sweepEvent = new UpgradedBlockBreakEvent(crop, player);
+                                this.getServer().getPluginManager().callEvent(sweepEvent);
+                                if (!sweepEvent.isCancelled()) {
+                                    // Get the state of the harvested crop.
+                                    BlockState state = crop.getState();
+                                    Collection<ItemStack> itemDrops = crop.getDrops(tool);
+                                    // Break the crop and spawn effects.
+                                    breakBlockEffect(crop, state, Sound.BLOCK_CROP_BREAK);
                                     crop.setType(Material.AIR);
+                                    // Damage the player's tool if they are in survival.
+                                    damageTool(player, tool, 1);
+                                    boolean replant = false;
+                                    GameMode mode = player.getGameMode();
+                                    if (mode == GameMode.CREATIVE && this.getConfig().getBoolean(CONFIGURATION_HOE_REPLANT, true)) {
+                                        replant = true;
+                                    }
+                                    if (sweepEvent.isDropItems() && mode != GameMode.CREATIVE) {
+                                        // Calculate the drops from the crop.
+                                        List<Item> drops = new ArrayList<>();
+                                        Material seed = cropMaterials.get(state.getType()).getSeed();
+                                        for (ItemStack itemDrop : itemDrops) {
+                                            // If replanting is enabled, and a seed is not found yet, search for one in this ItemStack.
+                                            if (this.getConfig().getBoolean(CONFIGURATION_HOE_REPLANT, true) && !replant) {
+                                                int amount = itemDrop.getAmount();
+                                                if (itemDrop.getType() == seed && amount >= 1) {
+                                                    itemDrop.setAmount(amount - 1);
+                                                    replant = true;
+                                                }
+                                            }
+                                            drops.add(crop.getWorld().dropItemNaturally(crop.getLocation(), itemDrop));
+                                        }
+                                        // Drop the items and send an event.
+                                        List<Item> copy = Lists.newArrayList(drops);
+                                        BlockDropItemEvent dropEvent = new BlockDropItemEvent(crop, state, player, copy);
+                                        this.getServer().getPluginManager().callEvent(dropEvent);
+                                        // Clear all items from the copy if the event is cancelled.
+                                        if (dropEvent.isCancelled()) {
+                                            copy.clear();
+                                        }
+                                        // Kill those items that were removed from the copied drop list.
+                                        for (Item drop : drops) {
+                                            if (!copy.contains(drop)) {
+                                                drop.remove();
+                                            }
+                                        }
+                                    }
+                                    // Use a seed to replant the crop.
+                                    if (replant) {
+                                        crop.setType(state.getType());
+                                    }
                                 }
-                                // Plant a new crop.
-                                crop.setType(state.getType());
-                                // Apply damage to the hoe if in survival or adventure mode.
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    public void breakBlockEffect(Location location, BlockState state, Sound sound) {
+        location.getWorld().spawnParticle(Particle.BLOCK_CRACK, location, 50, 0.5, 0.5, 0.1, state.getBlockData());
+        location.getWorld().playSound(location, sound, 1, 1);
+    }
+
+    public void breakBlockEffect(Block block, BlockState state, Sound sound) {
+        breakBlockEffect(block.getLocation().clone().add(0.5, 0.5, 0.5), state, sound);
     }
 
     /**
@@ -543,6 +697,10 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
             y--;
         }
         return Optional.empty();
+    }
+
+    private boolean configDryFarmland() {
+        return this.getConfig().getBoolean(CONFIGURATION_DRY_FARMLAND, false);
     }
 
 }

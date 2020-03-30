@@ -1,0 +1,26 @@
+# FarmingUpgrade Configuration
+
+# Configuration version. Do not change.
+version: 1
+
+# Crops are trampled instead of Farmland.
+trampleCrops: true
+
+# Use upgraded water search to hydrate Farmland. Disable to use Vanilla hydration.
+hydrationUpgrade: true
+
+# The horizontal radius from a Farmland to look for water. Vanilla has a radius of 4.
+hydrationRange: 4
+
+# The number of blocks under the Farmland to look for water. Set to 0 to only search on the same level. Vanilla has
+# a depth of 0.
+hydrationDepth: 2
+
+# Farmland that is not hydrated will eventually turn to Dirt. true in Vanilla.
+dryFarmland: false
+
+# Enable upgraded hoes that only break fully grown crops, and has a range.
+hoeUpgrade: true
+
+# If hoeUpgrade is enabled, this controls whether crops are automatically replanted after being destroyed by a hoe.
+hoeReplant: true
