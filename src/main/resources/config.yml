@@ -1,4 +1,5 @@
 # FarmingUpgrade Configuration
+# Changes to the configuration is immediately detected by the server.
 
 # Configuration version. Do not change.
 version: 1

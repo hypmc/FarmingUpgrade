@@ -536,7 +536,9 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
                                                     replant = true;
                                                 }
                                             }
-                                            drops.add(crop.getWorld().dropItemNaturally(crop.getLocation(), itemDrop));
+                                            if (itemDrop.getType().isItem() && itemDrop.getAmount() >= 1) {
+                                                drops.add(crop.getWorld().dropItemNaturally(crop.getLocation(), itemDrop));
+                                            }
                                         }
                                         // Drop the items and send an event.
                                         List<Item> copy = Lists.newArrayList(drops);
