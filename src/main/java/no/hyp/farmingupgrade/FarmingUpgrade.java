@@ -197,7 +197,8 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
                 } else {
                     Block above = farmland.getRelative(0, 1, 0);
                     if (!configDryFarmland()) {
-                        if (cropMaterials.containsKey(above.getType()) || above.getType() == Material.AIR) {
+                        // Only dry farmland if there is an occluding block above it.
+                        if (!above.getType().isOccluding()) {
                             e.setCancelled(true);
                         }
                     }
@@ -247,7 +248,7 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
 
     public void farmlandDetermineUpgradedMoisture(BlockState state) {
         Material aboveType = state.getBlock().getRelative(0, 1, 0).getType();
-        if (aboveType == Material.AIR || cropMaterials.containsKey(aboveType)) {
+        if (!aboveType.isOccluding()) {
             ConfigurationSection configuration = this.getConfig();
             int range = configuration.getInt(CONFIGURATION_HYDRATION_RANGE, 4);
             int depth = configuration.getInt(CONFIGURATION_HYDRATION_DEPTH, 2);

@@ -1,6 +1,6 @@
 name: FarmingUpgrade
 author: Torm
 description: Upgraded farming mechanics.
-version: 1.1.1
+version: 1.1.2
 main: no.hyp.farmingupgrade.FarmingUpgrade
 api-version: 1.13
