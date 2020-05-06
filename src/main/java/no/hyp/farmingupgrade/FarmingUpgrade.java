@@ -13,59 +13,103 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.*;
-import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
-import org.bukkit.util.Vector;
-import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
 import java.nio.file.Path;
 import java.util.*;
 import java.util.function.Consumer;
 
-public class FarmingUpgrade extends JavaPlugin implements Listener {
+public final class FarmingUpgrade extends JavaPlugin implements Listener {
 
-    private Thread watcherThread;
+    Thread watcherThread;
 
-    private Random random;
+    HarvestListener harvestListener;
+
+    HydrationListener hydrationListener;
+
+    FertiliseListener fertiliseListener;
+
+    TrampleListener trampleListener;
+
+    Random random;
 
     /**
      * A map of hoes and their ranges.
      */
-    private Map<Material, Integer> tools;
+    Map<Material, Integer> tools;
 
     /**
      * Crops that are harvested by being broken and replanted with a seed.
      */
-    private Map<Material, Material> harvestableCrops;
+    Map<Material, Material> harvestableCrops;
 
-    private Map<Material, Consumer<BlockState>> fertilisableCrops;
+    Map<Material, Consumer<BlockState>> fertilisableCrops;
 
-    /**
-     * When a player tramples farmland, Minecraft calls a PlayerInteractEvent, and then
-     * a BlockFadeEvent. Minecraft also calls FadeEvent when a Farmland is turning to
-     * Dirt from dehydration. To distinguish between trampling and drying, store the
-     * block that is trampled in InteractEvent here and check if it equal in the FadeEvent.
-     */
-    private Block trampledFarmland;
+    boolean configurationHydrationUpgrade() {
+        return this.getConfig().getBoolean("hydrationUpgrade.enabled", false);
+    }
+
+    int configurationHydrationRange() {
+        return this.getConfig().getInt("hydrationUpgrade.range", 4);
+    }
+
+    int configurationHydrationDepth() {
+        return this.getConfig().getInt("hydrationUpgrade.depth", 2);
+    }
+
+    int configurationHydrationHeight() {
+        return this.getConfig().getInt("hydrationUpgrade.height", 0);
+    }
+
+    boolean configurationHydrationDry() {
+        return this.getConfig().getBoolean("hydrationUpgrade.dry", false);
+    }
+
+    boolean configurationHoeUpgrade() {
+        return this.getConfig().getBoolean("hoeUpgrade.enabled", true);
+    }
+
+    boolean configurationHoeRange() {
+        return this.getConfig().getBoolean("hoeUpgrade.range", true);
+    }
+
+    boolean configurationHoeEfficiency() {
+        return this.getConfig().getBoolean("hoeUpgrade.efficiency", true);
+    }
+
+    boolean configurationHoeUnbreaking() {
+        return this.getConfig().getBoolean("hoeUpgrade.unbreaking", true);
+    }
+
+    boolean configurationHoeHarvest() {
+        return this.getConfig().getBoolean("hoeUpgrade.harvest", true);
+    }
+
+    boolean configurationHoeReplant() {
+        return this.getConfig().getBoolean("hoeUpgrade.replant", true);
+    }
+
+    boolean configurationHoeCollect() {
+        return this.getConfig().getBoolean("hoeUpgrade.collect", false);
+    }
+
+    boolean configurationFertiliserUpgrade() {
+        return this.getConfig().getBoolean("fertiliserUpgrade.enabled", true);
+    }
+
+    boolean configurationTrampleUpgrade() {
+        return this.getConfig().getBoolean("trampleUpgrade.enabled", true);
+    }
 
     @Override
     public void onEnable() {
         this.random = new Random();
-        // Load the configuration. Save the default config if it does not exist.
-        this.saveDefaultConfig();
-        this.reloadConfig();
-        // Upgrade the configuration if necessary.
-        this.configurationUpgrade();
-        // Enable configuration watcher.
-        this.watcherEnable();
-        // Register the event listeners.
-        this.getServer().getPluginManager().registerEvents(this, this);
         // Set hoe properties.
         this.tools = new HashMap<>();
         this.tools.put(Material.WOODEN_HOE, 0);
@@ -90,28 +134,24 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
         this.fertilisableCrops.put(Material.BEETROOTS, beetrootFertilise);
         this.fertilisableCrops.put(Material.PUMPKIN_STEM, commonFertilise);
         this.fertilisableCrops.put(Material.MELON_STEM, commonFertilise);
-    }
-
-    /**
-     * Use Bernoulli trials to determine how many growth stages to add to a crop.
-     */
-    private static void trialGrow(Random random, int trials, double probability, BlockState state) {
-        BlockData data = state.getBlockData();
-        if (data instanceof Ageable) {
-            // Run Bernoulli trials to determine growth stage increase.
-            int stages = 0;
-            int i = 0;
-            while (i < trials) {
-                if (random.nextDouble() < probability) {
-                    stages++;
-                }
-                i++;
-            }
-            // Add the growth stages to the state.
-            Ageable ageable = (Ageable) data;
-            ageable.setAge(Math.min(ageable.getAge() + stages, ageable.getMaximumAge()));
-        }
-        state.setBlockData(data);
+        // Load the configuration. Save the default config if it does not exist.
+        this.saveDefaultConfig();
+        this.reloadConfig();
+        // Upgrade the configuration if necessary.
+        this.configurationUpgrade();
+        // Enable configuration watcher.
+        this.watcherEnable();
+        // Register the event listeners.
+        this.getServer().getPluginManager().registerEvents(this, this);
+        // Set listeners.
+        this.harvestListener = new HarvestListener(this, this.random);
+        this.hydrationListener = new HydrationListener(this);
+        this.fertiliseListener = new FertiliseListener(this, this.random);
+        this.trampleListener = new TrampleListener(this);
+        this.getServer().getPluginManager().registerEvents(harvestListener, this);
+        this.getServer().getPluginManager().registerEvents(hydrationListener, this);
+        this.getServer().getPluginManager().registerEvents(fertiliseListener, this);
+        this.getServer().getPluginManager().registerEvents(trampleListener, this);
     }
 
     @Override
@@ -157,296 +197,38 @@ public class FarmingUpgrade extends JavaPlugin implements Listener {
         }
     }
 
+    public Map<Material, Integer> getTools() {
+        return this.tools;
+    }
+
+    public Map<Material, Material> getHarvestableCrops() {
+        return this.harvestableCrops;
+    }
+
+    public Map<Material, Consumer<BlockState>> getFertilisableCrops() {
+        return this.fertilisableCrops;
+    }
+
     /**
-     * A PlayerInteractEvent is called for Farmland when it is trampled by a player. The result of this
-     * event is to call a BlockFadeEvent afterwards.
-     *
-     * If upgraded trampling is not enabled, do not handle this event.
-     *
-     * @param e
+     * Use Bernoulli trials to determine how many growth stages to add to a crop.
      */
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarmlandTrample(@NotNull PlayerInteractEvent e) {
-        // Check that this is a Farmland trample event.
-        Block farmland = e.getClickedBlock();
-        boolean trample = farmland != null && farmland.getType() == Material.FARMLAND && e.getAction() == Action.PHYSICAL;
-        if (!trample) {
-            return;
-        }
-        // Do not handle events that are called by FarmingUpgrade.
-        if (e instanceof UpgradedPlayerInteractEvent) {
-            return;
-        }
-        // If trample upgrade is enabled, handle trampling. Otherwise, let Minecraft
-        // handle the trampling but set the trample block so it can be identified.
-        if (this.configurationTrampleUpgrade()) {
-            // Cancel to handle manually.
-            e.setUseInteractedBlock(Event.Result.DENY);
-            // Trample the crop above the farmland.
-            Block crop = farmland.getRelative(0, 1, 0);
-            if (harvestableCrops.containsKey(crop.getType())) {
-                // Send an InteractEvent for the trampled crop.
-                UpgradedPlayerInteractEvent trampleEvent = new UpgradedPlayerInteractEvent(e.getPlayer(), e.getAction(), e.getItem(), crop, e.getBlockFace());
-                this.getServer().getPluginManager().callEvent(trampleEvent);
-                if (trampleEvent.useInteractedBlock() == Event.Result.ALLOW) {
-                    // Calculate the state of the crop after being trampled.
-                    BlockState oldState = crop.getState();
-                    BlockState state = crop.getState();
-                    state.setType(Material.AIR);
-                    state.setType(crop.getType());
-                    // Send a BlockFadeEvent to indicate the crop being reset.
-                    UpgradedBlockFadeEvent fadeEvent = new UpgradedBlockFadeEvent(crop, state);
-                    this.getServer().getPluginManager().callEvent(fadeEvent);
-                    if (!fadeEvent.isCancelled()) {
-                        state.update(true);
-                        breakBlockEffect(crop, oldState, Sound.BLOCK_CROP_BREAK);
-                    }
+    public static void trialGrow(Random random, int trials, double probability, BlockState state) {
+        BlockData data = state.getBlockData();
+        if (data instanceof Ageable) {
+            // Run Bernoulli trials to determine growth stage increase.
+            int stages = 0;
+            int i = 0;
+            while (i < trials) {
+                if (random.nextDouble() < probability) {
+                    stages++;
                 }
+                i++;
             }
-        } else {
-            this.trampledFarmland = farmland;
+            // Add the growth stages to the state.
+            Ageable ageable = (Ageable) data;
+            ageable.setAge(Math.min(ageable.getAge() + stages, ageable.getMaximumAge()));
         }
-    }
-
-
-
-    /**
-     * A BlockFadeEvent is called when Minecraft wants to turn a Farmland block with a moisture level of 0
-     * into Dirt.
-     *
-     * It is also called after a PlayerInteractEvent, after a player tramples (jumps on) a
-     * Farmland block. This happens if upgraded trample mechanics is not enabled.
-     *
-     * Trample is handled elsewhere, so only handle drying here.
-     *
-     * @param e The event.
-     */
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarmlandDry(BlockFadeEvent e) {
-        // Do not handle events that are called by FarmingUpgrade.
-        if (e instanceof UpgradedBlockFadeEvent) {
-            return;
-        }
-        //
-        Block farmland = e.getBlock();
-        if (farmland.getType() != Material.FARMLAND) {
-            return;
-        }
-        // Check if this block was trampled or if it is drying up.
-        // If this block is drying, apply upgraded hydration mechanics if they are enabled.
-        // If the block is trampled, let Minecraft handle it.
-        if (!farmland.equals(this.trampledFarmland)) {
-            // If upgraded hydration is enabled, cancel the event and handle it manually.
-            // Otherwise, let Minecraft handle the event as normal.
-            if (this.configurationHydrationUpgrade()) {
-                e.setCancelled(true);
-                farmlandUpgradedChangeMoisture(farmland, configurationHydrationRange(), configurationHydrationDepth(), configurationHydrationHeight(), configurationHydrationDry());
-            }
-        } else {
-            this.trampledFarmland = null;
-        }
-    }
-
-    /**
-     * MoistureChangeEvent is called when Minecraft wants to change the moisture level of
-     * Farmland. Minecraft wants to dehydrate or dry (turn to Dirt) Farmland outside the
-     * Vanilla water range, and hydrate Farmland within the Vanilla water range.
-     *
-     * For blocks outside the Vanilla water range, but within the upgraded water range, cancel this
-     * event and hydrate the Farmland instead. Remember to also catch BlockFadeEvent for Farmland with the
-     * lowest humidity.
-     *
-     * For blocks inside the Vanilla water range, but outside the upgraded water range, dehydrate
-     * the Farmland instead. For fully hydrated Farmland, no event will be thrown. Use something
-     * like BlockGrowEvent to create events for fully hydrated Farmland.
-     *
-     * @param e
-     */
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarmlandMoistureChange(MoistureChangeEvent e) {
-        if (!this.configurationHydrationUpgrade()) {
-            return;
-        }
-        // Do not handle events that are called by FarmingUpgrade.
-        if (e instanceof UpgradedMoistureChangeEvent) {
-            return;
-        }
-        Block block = e.getBlock();
-        if (block.getType() == Material.FARMLAND) {
-            e.setCancelled(true);
-            farmlandUpgradedChangeMoisture(block, configurationHydrationRange(), configurationHydrationDepth(), configurationHydrationHeight(), configurationHydrationDry());
-        }
-
-    }
-
-    /**
-     * BlockGrowEvent is called when a crop grows.
-     *
-     * Minecraft does not send any events for fully hydrated Farmland within the Vanilla water range.
-     * Use BlockGrowEvents to create events for fully hydrated Farmland to use upgraded hydration mechanics.
-     *
-     * Minecraft does not dry Farmland into Dirt if there is a crop on it, and thus do not send
-     * any events either. Use the grow event to update the Farmland moisture.
-     *
-     * @param e
-     */
-    @EventHandler(priority = EventPriority.MONITOR)
-    public void onCropGrow(BlockGrowEvent e) {
-        if (!this.configurationHydrationUpgrade()) {
-            return;
-        }
-        if (e.isCancelled()) {
-            return;
-        }
-        Block below = e.getBlock().getRelative(0, -1, 0);
-        if (below.getType() == Material.FARMLAND) {
-            farmlandUpgradedChangeMoisture(below, configurationHydrationRange(), configurationHydrationDepth(), configurationHydrationHeight(), configurationHydrationDry());
-        }
-    }
-
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFertilise(BlockFertilizeEvent e) {
-        // Only handle if upgraded fertilisation is enabled.
-        if (!this.configurationFertiliserUpgrade()) {
-            return;
-        }
-        // Do not handle delegated BlockFertilizeEvents.
-        if (e instanceof UpgradedBlockFertilizeEvent) {
-            return;
-        }
-        Block block = e.getBlock();
-        // Upgraded fertilisation mechanics are only enabled for specific crops.
-        if (!this.fertilisableCrops.containsKey(block.getType())) {
-            return;
-        }
-        // Cancel to let plugin handle event.
-        e.setCancelled(true);
-        // Find adjacent fertilisable crops, send a BlockFertilizeEvent for them and apply
-        // fertiliser if the event is successful.
-        Collection<Block> fertilisedBlocks = findAdjacentMaterials(this.fertilisableCrops.keySet(), block, 1);
-        for (Block fertilisedBlock : fertilisedBlocks) {
-            BlockState fertilisedState = fertilisedBlock.getState();
-            // Apply fertiliser to the crop state.
-            Consumer<BlockState> fertiliserFunction = this.fertilisableCrops.get(fertilisedState.getType());
-            fertiliserFunction.accept(fertilisedState);
-            // Call an event for the fertilised block.
-            UpgradedBlockFertilizeEvent upgradedEvent = new UpgradedBlockFertilizeEvent(fertilisedBlock, e.getPlayer(), Lists.newArrayList(fertilisedState));
-            this.getServer().getPluginManager().callEvent(upgradedEvent);
-            // If the event is allowed, apply fertiliser.
-            if (!upgradedEvent.isCancelled()) {
-                fertilisedState.update();
-                fertiliseEffect(fertilisedBlock);
-            }
-        }
-    }
-
-    /**
-     * If a player breaks a crop with a hoe, handle this event manually. Find the adjacent crops
-     * and call custom UpgradedBlockBreakEvents on the to give other plugins a chance to catch them.
-     *
-     * Since this is a mechanic the event should be caught and cancelled as early as possible (LOWEST priority).
-     * Then we can dispatch new events that we can control the outcome of ourselves.
-     */
-    @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarm(BlockBreakEvent e) {
-        if (!this.configurationHoeUpgrade()) {
-            return;
-        }
-        // Do not handle events that are called by FarmingUpgrade.
-        if (e instanceof UpgradedBlockBreakEvent) {
-            return;
-        }
-        Player player = e.getPlayer();
-        Block crop = e.getBlock();
-        // Handle breaking of crops.
-        if (!harvestableCrops.containsKey(crop.getType())) {
-            return;
-        }
-        ItemStack tool = player.getInventory().getItemInMainHand();
-        // If broken by a hoe, all crops within range are harvested and automatically replanted.
-        if (!tools.containsKey(tool.getType())) {
-            return;
-        }
-        e.setCancelled(true);
-        Vector direction = player.getLocation().getDirection();
-        //direction.add(new Vector(0.0, -direction.getY(), 0.0)).multiply(1.0 / direction.length());
-        Location location = player.getEyeLocation();
-        location.add(direction.multiply(1.5));
-        player.getWorld().spawnParticle(Particle.SWEEP_ATTACK, location, 1);
-        // Calculate the radius of the hoe sweep.
-        // Radius is affected by hoe material and the Efficiency enchantment (1 radius per 2 levels).
-        int range;
-        if (configurationHoeRange()) {
-            if (configurationHoeEfficiency()) {
-                range = Math.min(7, tools.get(tool.getType()) + tool.getEnchantmentLevel(Enchantment.DIG_SPEED) / 2);
-            } else {
-                range = Math.min(7, tools.get(tool.getType()));
-            }
-        } else {
-            range = 0;
-        }
-        // Get the adjacent crops in range.
-        Set<Block> adjacentCrops = findAdjacentMaterials(this.harvestableCrops.keySet(), crop, range);
-        // For every crop block, simulate a BlockBreakEvent for other plugins to react to.
-        for (Block adjacentCrop : adjacentCrops) {
-            harvestCrop(this.random, player, adjacentCrop, tool, configurationHoeReplant(), configurationHoeUnbreaking(), configurationHoeCollect(), configurationHoeHarvest(), this.harvestableCrops.get(adjacentCrop.getType()));
-        }
-    }
-
-    private boolean configurationHydrationUpgrade() {
-        return this.getConfig().getBoolean("hydrationUpgrade.enabled", false);
-    }
-
-    private int configurationHydrationRange() {
-        return this.getConfig().getInt("hydrationUpgrade.range", 4);
-    }
-
-    private int configurationHydrationDepth() {
-        return this.getConfig().getInt("hydrationUpgrade.depth", 2);
-    }
-
-    private int configurationHydrationHeight() {
-        return this.getConfig().getInt("hydrationUpgrade.height", 0);
-    }
-
-    private boolean configurationHydrationDry() {
-        return this.getConfig().getBoolean("hydrationUpgrade.dry", false);
-    }
-
-    private boolean configurationHoeUpgrade() {
-        return this.getConfig().getBoolean("hoeUpgrade.enabled", true);
-    }
-
-    private boolean configurationHoeRange() {
-        return this.getConfig().getBoolean("hoeUpgrade.range", true);
-    }
-
-    private boolean configurationHoeEfficiency() {
-        return this.getConfig().getBoolean("hoeUpgrade.efficiency", true);
-    }
-
-    private boolean configurationHoeUnbreaking() {
-        return this.getConfig().getBoolean("hoeUpgrade.unbreaking", true);
-    }
-
-    private boolean configurationHoeHarvest() {
-        return this.getConfig().getBoolean("hoeUpgrade.harvest", true);
-    }
-
-    private boolean configurationHoeReplant() {
-        return this.getConfig().getBoolean("hoeUpgrade.replant", true);
-    }
-
-    private boolean configurationHoeCollect() {
-        return this.getConfig().getBoolean("hoeUpgrade.collect", false);
-    }
-
-    private boolean configurationFertiliserUpgrade() {
-        return this.getConfig().getBoolean("fertiliserUpgrade.enabled", true);
-    }
-
-    private boolean configurationTrampleUpgrade() {
-        return this.getConfig().getBoolean("trampleUpgrade.enabled", true);
+        state.setBlockData(data);
     }
 
     public static void farmlandUpgradedChangeMoisture(Block farmland, int range, int depth, int height, boolean dry) {

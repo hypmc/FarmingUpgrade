@@ -12,7 +12,7 @@ import static java.nio.file.StandardWatchEventKinds.*;
  * the plugin reads the configuration again. This allows a user to edit the configuration and see
  * the changes in game without reloading the server.
  */
-class ConfigurationWatcher implements Runnable {
+final class ConfigurationWatcher implements Runnable {
 
     private final FarmingUpgrade plugin;
 
