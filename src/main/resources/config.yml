@@ -2,26 +2,46 @@
 # Changes to the configuration is immediately detected by the server.
 
 # Configuration version. Do not change.
-version: 1
+version: 2
 
-# Crops are trampled instead of Farmland.
-trampleCrops: true
+# Upgraded hoe mechanics.
+hoeUpgrade:
+  # Enable upgraded hoes.
+  enabled: true
+  # Hoes harvest crops within a range. Disable to only harvest the broken block.
+  range: true
+  # Efficiency enchantment increases the range of a hoe.
+  efficiency: true
+  # Unbreaking enchantment has a chance to prevent hoes from taking damage.
+  unbreaking: true
+  # Only break fully grown crops.
+  harvest: true
+  # Crops are automatically replanted after being harvested by a hoe if a seed is dropped.
+  replant: true
+  # Harvested items are directly placed in the player's inventory if there is space.
+  collect: false
 
-# Use upgraded water search to hydrate Farmland. Disable to use Vanilla hydration.
-hydrationUpgrade: true
+# Upgraded water search and Farmland hydration mechanics.
+hydrationUpgrade:
+  # Use upgraded water search to hydrate Farmland. Disable to use Vanilla hydration.
+  enabled: true
+  # The horizontal radius from a Farmland to look for water. Vanilla has a radius of 4.
+  range: 4
+  # The number of blocks under the Farmland to look for water. Set to 0 to only search
+  # on the same level. Vanilla has a depth of 0.
+  depth: 2
+  # The number of blocks above Farmland to search for water. Vanilla has a height of 0.
+  height: 0
+  # Farmland that is not hydrated will eventually turn to Dirt. true in Vanilla.
+  dry: false
 
-# The horizontal radius from a Farmland to look for water. Vanilla has a radius of 4.
-hydrationRange: 4
+# Upgraded bonemeal mechanics. Bonemeal has a range of 1 but is weaker.
+# More efficient than Vanilla when used to fertilise multiple crops.
+fertiliserUpgrade:
+  # Enable upgraded bonemeal mechanics.
+  enabled: true
 
-# The number of blocks under the Farmland to look for water. Set to 0 to only search on the same level. Vanilla has
-# a depth of 0.
-hydrationDepth: 2
-
-# Farmland that is not hydrated will eventually turn to Dirt. true in Vanilla.
-dryFarmland: false
-
-# Enable upgraded hoes that only break fully grown crops, and has a range.
-hoeUpgrade: true
-
-# If hoeUpgrade is enabled, this controls whether crops are automatically replanted after being destroyed by a hoe.
-hoeReplant: true
+# Upgraded crop trampling.
+trampleUpgrade:
+  # Crops are trampled (reset to their first growth stage) instead of Farmland.
+  enabled: true
