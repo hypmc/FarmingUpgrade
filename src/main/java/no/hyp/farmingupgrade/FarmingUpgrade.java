@@ -117,6 +117,7 @@ public final class FarmingUpgrade extends JavaPlugin implements Listener {
         this.tools.put(Material.GOLDEN_HOE, 1);
         this.tools.put(Material.IRON_HOE, 1);
         this.tools.put(Material.DIAMOND_HOE, 2);
+        this.tools.put(Material.NETHERITE_HOE, 2);
         // Set harvestable crop properties.
         this.harvestableCrops = new HashMap<>();
         this.harvestableCrops.put(Material.WHEAT, Material.WHEAT_SEEDS);
