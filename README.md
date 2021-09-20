@@ -1,41 +1,48 @@
 # FarmingUpgrade
 
-Upgraded hoe and farming mechanics.
+Upgraded farming mechanics.
 
 ### Compatibility
 
-Tested for Spigot 1.16.1.
+Tested for Spigot 1.17.1.
 
 ### Features
 
-All features can be configured and enabled or disabled in the configuration file.
+All features can be configured, enabled or disabled in the configuration file.
 
-#### Upgraded Harvesting
+#### Upgraded harvesting
 
-- Harvesting a grown crop with a hoe automatically replants the crop.
-- Hoes do not break crops that are not fully grown.
-- Hoes harvest grown crops within a range. Wood and Stone have a range of 0, Iron and Gold a range of 1 and Diamond and Netherite a range of 2.
-- Hoes with higher enchantment levels of Unbreaking have a higher chance to not take damage when harvesting crops.
-- Hoes with higher enchantment levels of Efficiency increases the range of the hoe. For every 2 levels of Efficiency, the hoe gains 1 range.
+- **Harvest tools** Configurable list of harvest tools. Primarily intended for hoes.
+- **Area harvest tools** Tools may harvest crops within a radius. Radius depends on quality of tool, such as material, enchantments or item lore.
+- **Automatic replanting** Tools may replant the crop when it harvests it.
+- **Only break mature crops** Tools only break mature crops.
+- **Unbreaking applies** Tools with higher enchantment levels of Unbreaking have a higher chance to not take damage when harvesting crops.
+- **Collection mode** The yield from harvesting may be collected directly in the player's inventory.
 
-#### Upgraded Farmland Hydration
+#### Upgraded farmland hydration
 
-In Vanilla, water hydrates Farmland within a horizontal range of 4 blocks.
+- **Customised water search radiï** In Vanilla, water hydrates Farmland within a horizontal radius of 4 blocks.
 Upgraded hydration replaces the Vanilla range with a new horizontal range, height and depth of hydration.
+- **Farmland drought** Enable or disable farmland turning back to dirt when it is not hydrated.
+
+#### Upgraded fertilisation
+
+- **Area fertilisation** Bonemeal is weaker but fertilises all adjacent crops too, which makes it slightly stronger than Vanilla bonemeal.
 
 #### Upgraded Farmland Trampling
 
-When a player tramples farmland, the crop that is planted on it is reset to its first growth stage.
+- **Crop trampling** When a player tramples farmland, the crop that is planted on it is reset to its first growth stage.
 The farmland itself is not reset to dirt, like in Vanilla.
+- **Trample by walking** A player may trample crops simply by walking or running over them.
 
-#### Upgraded Bonemeal
+### Commands
 
-Bonemeal is weaker but fertilises all adjacent crops too, which makes it slightly stronger than Vanilla bonemeal.
+`farmingupgrade reload` - Reload the configuration file. Requires the permission `farmingupgrade.administrator`.
 
 ### Configuration
 
-[Default Configuration](https://github.com/Torm/FarmingUpgrade/blob/master/src/main/resources/config.yml)
+[Default configuration](https://github.com/Torm/FarmingUpgrade/blob/master/src/main/resources/config.yml)
 
 ### Installation
 
-Download and place the FarmingUpgrade jar file in the Bukkit plugins directory.
+Download and place the FarmingUpgrade jar file in the Bukkit server's `plugins` directory.
