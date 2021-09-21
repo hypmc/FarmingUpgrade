@@ -214,7 +214,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 @Nullable var materialString = toolSection.getString("material");
                 @Nullable var material = materialString != null ? Material.matchMaterial(materialString) : null;
                 @Nullable var lore = toolSection.getString("lore");
-                var radius = toolSection.getInt("radius");
+                var radius = toolSection.getDouble("radius");
                 var damage = toolSection.getInt("damage");
                 tools.add(new HarvestToolType(material, lore, radius, damage));
             }
@@ -374,12 +374,12 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     }
 
     int calculateRadius(HarvestToolType toolType, ItemStack toolItem) {
-        var radius = 0;
+        var radius = 0.0;
         radius += toolType.radius();
         var efficiencyRangePerLevel = configuration().harvestRadiusPerEfficiencyLevel();
         radius += toolItem.getEnchantmentLevel(Enchantment.DIG_SPEED) * efficiencyRangePerLevel;
         radius = Math.min(10, radius); // Do not allow the radius to crash the server.
-        return radius;
+        return (int) radius;
     }
 
     /**
@@ -398,68 +398,67 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         callingBlockBreakEvent = true;
         Bukkit.getServer().getPluginManager().callEvent(upgradedEvent);
         callingBlockBreakEvent = false;
-        if (!upgradedEvent.isCancelled()) {
-            // A state representing the crop after the harvest.
-            BlockState state = block.getState();
-            // Calculate drops depending on tool.
-            Collection<ItemStack> itemDrops = block.getDrops(tool);
-            // Break the crop and spawn effects.
-            FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK);
-            block.setType(Material.AIR);
+        if (upgradedEvent.isCancelled()) return false;
+        // A state representing the crop after the harvest.
+        BlockState state = block.getState();
+        // Calculate drops depending on tool.
+        Collection<ItemStack> itemDrops = block.getDrops(tool);
+        // Break the crop and spawn effects.
+        FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK);
+        block.setType(Material.AIR);
 
-            // Whether a seed has been collected for replanting.
-            boolean seedFound = false;
-            GameMode mode = player.getGameMode();
-            // Drop items in survival.
-            if (upgradedEvent.isDropItems() && mode != GameMode.CREATIVE) {
-                // Search for a seed to replant the crop with if replanting is enabled.
-                if (replant) {
-                    for (ItemStack itemDrop : itemDrops) {
-                        // If replanting is enabled, and a seed is not found yet, search for one in this ItemStack.
-                        if (!seedFound) {
-                            int amount = itemDrop.getAmount();
-                            if (itemDrop.getType() == seed && amount >= 1) {
-                                itemDrop.setAmount(amount - 1);
-                                seedFound = true;
-                            }
+        // Whether a seed has been collected for replanting.
+        boolean seedFound = false;
+        GameMode mode = player.getGameMode();
+        // Drop items in survival.
+        if (upgradedEvent.isDropItems() && mode != GameMode.CREATIVE) {
+            // Search for a seed to replant the crop with if replanting is enabled.
+            if (replant) {
+                for (ItemStack itemDrop : itemDrops) {
+                    // If replanting is enabled, and a seed is not found yet, search for one in this ItemStack.
+                    if (!seedFound) {
+                        int amount = itemDrop.getAmount();
+                        if (itemDrop.getType() == seed && amount >= 1) {
+                            itemDrop.setAmount(amount - 1);
+                            seedFound = true;
                         }
                     }
                 }
-                // If collect is enabled, items are sent to the inventory if there is space.
-                if (collect) {
-                    Inventory inventory = player.getInventory();
-                    Set<ItemStack> notAddedItems = new HashSet<>();
-                    for (ItemStack item : itemDrops) {
-                        notAddedItems.addAll(inventory.addItem(item).values());
-                    }
-                    itemDrops = notAddedItems;
-                    //player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 1.0f + random.nextFloat());
+            }
+            // If collect is enabled, items are sent to the inventory if there is space.
+            if (collect) {
+                Inventory inventory = player.getInventory();
+                Set<ItemStack> notAddedItems = new HashSet<>();
+                for (ItemStack item : itemDrops) {
+                    notAddedItems.addAll(inventory.addItem(item).values());
                 }
-                // Calculate the dropped item entities.
-                List<Item> drops = new ArrayList<>();
-                for (ItemStack itemDrop : itemDrops) {
-                    if (itemDrop.getType().isItem() && itemDrop.getType() != Material.AIR && itemDrop.getAmount() >= 1) {
-                        drops.add(block.getWorld().dropItemNaturally(block.getLocation(), itemDrop));
-                    }
-                }
-                // Send a BlockDropItemEvent for the drops.
-                List<Item> copy = Lists.newArrayList(drops);
-                BlockDropItemEvent dropEvent = new BlockDropItemEvent(block, state, player, copy);
-                Bukkit.getServer().getPluginManager().callEvent(dropEvent);
-                // Kill those items that were removed from the copied drop list, or all of them
-                // if the event is cancelled.
-                if (dropEvent.isCancelled()) {
-                    copy.clear();
-                }
-                for (Item drop : drops) {
-                    if (!copy.contains(drop)) {
-                        drop.remove();
-                    }
+                itemDrops = notAddedItems;
+                //player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 1.0f + random.nextFloat());
+            }
+            // Calculate the dropped item entities.
+            List<Item> drops = new ArrayList<>();
+            for (ItemStack itemDrop : itemDrops) {
+                if (itemDrop.getType().isItem() && itemDrop.getType() != Material.AIR && itemDrop.getAmount() >= 1) {
+                    drops.add(block.getWorld().dropItemNaturally(block.getLocation(), itemDrop));
                 }
             }
-            if (mode == GameMode.CREATIVE && replant) seedFound = true; // A crop is always replanted in creative mode.
-            if (seedFound) block.setType(state.getType()); // Replant the crop if the conditions are satisfied.
+            // Send a BlockDropItemEvent for the drops.
+            List<Item> copy = Lists.newArrayList(drops);
+            BlockDropItemEvent dropEvent = new BlockDropItemEvent(block, state, player, copy);
+            Bukkit.getServer().getPluginManager().callEvent(dropEvent);
+            // Kill those items that were removed from the copied drop list, or all of them
+            // if the event is cancelled.
+            if (dropEvent.isCancelled()) {
+                copy.clear();
+            }
+            for (Item drop : drops) {
+                if (!copy.contains(drop)) {
+                    drop.remove();
+                }
+            }
         }
+        if (mode == GameMode.CREATIVE && replant) seedFound = true; // A crop is always replanted in creative mode.
+        if (seedFound) block.setType(state.getType()); // Replant the crop if the conditions are satisfied.
         return true;
     }
 
@@ -998,7 +997,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         return Optional.empty();
     }
 
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, int radius, int damage) { }
+    record HarvestToolType(@Nullable Material material, @Nullable String lore, double radius, int damage) { }
 
     record ReplantableCrop(Material crop, @Nullable Material seeds) { }
 
