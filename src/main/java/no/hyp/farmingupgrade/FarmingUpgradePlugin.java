@@ -214,9 +214,10 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 @Nullable var materialString = toolSection.getString("material");
                 @Nullable var material = materialString != null ? Material.matchMaterial(materialString) : null;
                 @Nullable var lore = toolSection.getString("lore");
+                @Nullable var permission = toolSection.getString("permission");
                 var radius = toolSection.getDouble("radius");
                 var damage = toolSection.getInt("damage");
-                tools.add(new HarvestToolType(material, lore, radius, damage));
+                tools.add(new HarvestToolType(material, lore, permission, radius, damage));
             }
             return ImmutableList.copyOf(tools);
         }
@@ -335,6 +336,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var toolItem = player.getInventory().getItemInMainHand();
         @Nullable var toolType = configuration().toolType(toolItem).orElse(null);
         if (toolType == null) return; // If the crop was not broken by a harvest tool, proceed with Vanilla mechanics.
+        @Nullable var permission = toolType.permission();
+        if (permission != null && !player.hasPermission(permission)) return; // The player must have the tool permission to use the tool.
         event.setCancelled(true); // Cancel the Vanilla event to cancel the Vanilla mechanics.
         initiateHarvest(player, toolType, toolItem, centre);
     }
@@ -541,8 +544,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * For blocks inside the Vanilla water range, but outside the upgraded water range, dehydrate
      * the Farmland instead. For fully hydrated Farmland, no event will be thrown. Use something
      * like BlockGrowEvent to create events for fully hydrated Farmland.
-     *
-     * @param event
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFarmlandMoistureChange(MoistureChangeEvent event) {
@@ -566,8 +567,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      *
      * Minecraft does not dry Farmland into Dirt if there is a crop on it, and thus do not send
      * any events either. Use the grow event to update the Farmland moisture.
-     *
-     * @param event
      */
     @EventHandler(priority = EventPriority.MONITOR)
     public void onCropGrow(BlockGrowEvent event) {
@@ -677,8 +676,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     /**
      * A fertilise event is either called by the server when a player tries to fertilise a crop, or by the plugin.
-     *
-     * @param e
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFertilise(BlockFertilizeEvent e) {
@@ -744,8 +741,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * When called by the server, the server will call a BlockFadeEvent afterwards.
      *
      * If upgraded trampling is not enabled, do not handle this event.
-     *
-     * @param event
      */
     @EventHandler(priority = EventPriority.LOWEST)
     public void onFarmlandTrample(PlayerInteractEvent event) {
@@ -822,7 +817,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     public static int trialGrow(Random random, int trials, double probability, BlockState state) {
         var stageDifference = 0;
         var data = state.getBlockData();
-        if (data instanceof Ageable) {
+        if (data instanceof Ageable ageable) {
             // Run Bernoulli trials to determine growth stage increase.
             var stages = 0;
             var i = 0;
@@ -833,7 +828,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 i++;
             }
             // Add the growth stages to the state.
-            var ageable = (Ageable) data;
             var currentStage = ageable.getAge();
             var newStage = Math.min(ageable.getAge() + stages, ageable.getMaximumAge());
             stageDifference = newStage - currentStage;
@@ -913,8 +907,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      */
     public static Optional<Boolean> isMature(Block block) {
         var data = block.getBlockData();
-        if (data instanceof Ageable) {
-            var ageable = (Ageable) data;
+        if (data instanceof Ageable ageable) {
             return Optional.of(ageable.getAge() == ageable.getMaximumAge());
         } else {
             return Optional.empty();
@@ -997,7 +990,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         return Optional.empty();
     }
 
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, double radius, int damage) { }
+    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage) { }
 
     record ReplantableCrop(Material crop, @Nullable Material seeds) { }
 

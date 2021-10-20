@@ -20,6 +20,10 @@ harvest:
   # the same lore as a substring somewhere in its item lore. If an entry has no lore, then it may apply to an item with
   # any lore.
   tools:
+#    # Permission example - Player must have permission "farmer" to apply the tool.
+#    - permission: farmer
+#      radius: 1.5
+#      damage: 1
 #    # Fake enchantments
 #    - lore: Harvest I
 #      radius: 1.5
