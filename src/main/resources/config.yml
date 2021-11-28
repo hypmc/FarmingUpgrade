@@ -1,7 +1,7 @@
 # FarmingUpgrade configuration
 # Default configuration: https://github.com/Torm/FarmingUpgrade/blob/master/src/main/resources/config.yml
 
-# Configuration version. Do not change.
+# Configuration version. Do not modify.
 version: 4
 
 # The server requires the plugin. If the plugin fails, shut down the server.
@@ -77,6 +77,11 @@ harvest:
   onlyMature: true
   # Crops are automatically replanted after being broken by a hoe if a seed is dropped.
   replant: true
+  # Minimum and maximum number of ticks to wait between harvesting and replanting. A random number in the range is sampled.
+  replantDelayMinimum: 10
+  replantDelayMaximum: 20
+  # Create particles when replanting.
+  replantParticles: true
   # Dropped items from crops broken by a hoe are collected in the player's inventory if there is space.
   collect: false
   # A list of crops and their seeds.
@@ -131,3 +136,5 @@ trample:
   upgrade: true
   # Crops are trampled by walking or running over them.
   walk: false
+  # Farmland is trampled back to dirt if there is nothing growing on it.
+  revertEmpty: true

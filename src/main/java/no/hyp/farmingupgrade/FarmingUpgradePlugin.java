@@ -159,6 +159,12 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
             boolean harvestReplant,
 
+            int harvestReplantDelayMinimum,
+
+            int harvestReplantDelayMaximum,
+
+            boolean harvestReplantParticles,
+
             boolean harvestCollect,
 
             ImmutableList<ReplantableCrop> harvestCrops,
@@ -179,7 +185,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
             boolean trampleUpgrade,
 
-            boolean trampleWalk
+            boolean trampleWalk,
+
+            boolean revertEmpty
 
     ) {
 
@@ -192,6 +200,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     configuration.getBoolean("harvest.applyUnbreaking"),
                     configuration.getBoolean("harvest.onlyMature"),
                     configuration.getBoolean("harvest.replant"),
+                    configuration.getInt("harvest.replantDelayMinimum"),
+                    configuration.getInt("harvest.replantDelayMaximum"),
+                    configuration.getBoolean("harvest.replantParticles"),
                     configuration.getBoolean("harvest.collect"),
                     readCrops(configuration, "harvest.crops"),
                     configuration.getBoolean("hydrate.upgrade"),
@@ -202,7 +213,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     configuration.getBoolean("fertilise.upgrade"),
                     readPlants(configuration, "fertilise.plants"),
                     configuration.getBoolean("trample.upgrade"),
-                    configuration.getBoolean("trample.walk")
+                    configuration.getBoolean("trample.walk"),
+                    configuration.getBoolean("trample.revertEmpty")
             );
         }
 
@@ -461,7 +473,27 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             }
         }
         if (mode == GameMode.CREATIVE && replant) seedFound = true; // A crop is always replanted in creative mode.
-        if (seedFound) block.setType(state.getType()); // Replant the crop if the conditions are satisfied.
+        // Replant the crop if a seed was found or the player is in creative mode.
+        if (seedFound) {
+            var range = configuration().harvestReplantDelayMaximum() - configuration.harvestReplantDelayMinimum();
+            int delay;
+            if (range == 0) {
+                delay = configuration().harvestReplantDelayMinimum();
+            } else {
+                delay = configuration().harvestReplantDelayMinimum() + random.nextInt(range);
+            }
+            if (delay == 0) {
+                block.setType(state.getType());
+                if (configuration().harvestReplantParticles()) fertiliseEffect(block);
+            } else {
+                getServer().getScheduler().runTaskLater(this, () -> {
+                    if (block.isEmpty()) {
+                        block.setType(state.getType());
+                        if (configuration().harvestReplantParticles()) fertiliseEffect(block);
+                    }
+                }, delay);
+            }
+        }
         return true;
     }
 
@@ -752,6 +784,11 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var farmland = event.getClickedBlock();
         var trample = farmland != null && farmland.getType() == Material.FARMLAND && event.getAction() == Action.PHYSICAL;
         if (!trample) return;
+        // If there is no crop above and trample.revertEmpty is enabled, let the farmland be trampled like in Vanilla.
+        var crop = farmland.getRelative(0, 1, 0);
+        if (crop.isEmpty() && configuration().revertEmpty()) {
+            return;
+        }
         // Cancel to handle manually.
         event.setUseInteractedBlock(Event.Result.DENY);
         // Trample the crop above the farmland.
