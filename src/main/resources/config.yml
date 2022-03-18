@@ -2,73 +2,17 @@
 # Default configuration: https://github.com/Torm/FarmingUpgrade/blob/master/src/main/resources/config.yml
 
 # Configuration version. Do not modify.
-version: 4
+version: 5
+
 
 # The server requires the plugin. If the plugin fails, shut down the server.
 required: false
+
 
 # Upgraded harvesting mechanics.
 harvest:
   # Enable upgraded harvesting. (Vanilla: false)
   upgrade: true
-  # A list of harvesting tools, their harvest radiï and the damage they take from harvesting crops. Note that if an item
-  # has the unbreakable item attribute, it will never take any damage.
-  # The radius is a decimal, but is rounded down when used to find surrounding blocks.
-  # The first entry that applies to an item, is the one that is used to determine radius and damage. If no entry applies
-  # to an item, then the item is not a harvesting tool. An entry may only apply to an item with the same material. If an
-  # entry has no material, then it may apply to an item with any material. An entry may only apply to an item which has
-  # the same lore as a substring somewhere in its item lore. If an entry has no lore, then it may apply to an item with
-  # any lore.
-  tools:
-#    # Permission example - Player must have permission "farmer" to apply the tool.
-#    - permission: farmer
-#      radius: 1.5
-#      damage: 1
-#    # Fake enchantments
-#    - lore: Harvest I
-#      radius: 1.5
-#      damage: 1
-#    - lore: Harvest II
-#      radius: 2.5
-#      damage: 1
-    # Hoes
-    - material: WOODEN_HOE
-      radius: 0.5
-      damage: 1
-    - material: STONE_HOE
-      radius: 0.5
-      damage: 1
-    - material: IRON_HOE
-      radius: 1.5
-      damage: 1
-    - material: GOLDEN_HOE
-      radius: 1.5
-      damage: 1
-    - material: DIAMOND_HOE
-      radius: 2.5
-      damage: 1
-    - material: NETHERITE_HOE
-      radius: 2.5
-      damage: 1
-    # Swords
-    - material: WOODEN_SWORD
-      radius: 0
-      damage: 2
-    - material: STONE_SWORD
-      radius: 0
-      damage: 2
-    - material: IRON_SWORD
-      radius: 0
-      damage: 2
-    - material: GOLDEN_SWORD
-      radius: 0
-      damage: 2
-    - material: DIAMOND_SWORD
-      radius: 0
-      damage: 2
-    - material: NETHERITE_SWORD
-      radius: 0
-      damage: 2
   # Harvest radius increase from each level of the efficiency enchantment. A double whose product is rounded down.
   radiusPerEfficiencyLevel: 0.3
   # The unbreaking enchantment has a chance to prevent hoes from taking damage when breaking crops.
@@ -78,24 +22,16 @@ harvest:
   # Crops are automatically replanted after being broken by a hoe if a seed is dropped.
   replant: true
   # Minimum and maximum number of ticks to wait between harvesting and replanting. A random number in the range is sampled.
+  # Set both to 0 to replant instantly.
   replantDelayMinimum: 10
   replantDelayMaximum: 20
-  # Create particles when replanting.
-  replantParticles: true
+  # Control the number of particles that appear when harvesting and replanting.
+  # 1.0: default. 0.5: half as many. 0.0: none. 2.0: twice as many.
+  harvestParticles: 1.0
+  replantParticles: 1.0
   # Dropped items from crops broken by a hoe are collected in the player's inventory if there is space.
   collect: false
-  # A list of crops and their seeds.
-  crops:
-    - crop: WHEAT
-      seeds: WHEAT_SEEDS
-    - crop: POTATOES
-      seeds: POTATO
-    - crop: CARROTS
-      seeds: CARROT
-    - crop: BEETROOTS
-      seeds: BEETROOT_SEEDS
-    - crop: NETHER_WART
-      seeds: NETHER_WART
+
 
 # Upgraded water search and Farmland hydration mechanics.
 hydrate:
@@ -110,25 +46,13 @@ hydrate:
   # Farmland that is not hydrated will eventually turn to Dirt. (Vanilla: true).
   dry: false
 
+
 # Upgraded bonemeal mechanics. Bonemeal has a radius of 1 and is weaker on individual crops, but more efficient than
 # Vanilla bonemeal when used to fertilise multiple crops.
 fertilise:
   # Enable upgraded bonemeal mechanics. (Vanilla: false)
   upgrade: true
-  # A list of fertilisable plants and their expected growth.
-  plants:
-    - plant: WHEAT
-      growth: 0.50
-    - plant: POTATOES
-      growth: 0.50
-    - plant: CARROTS
-      growth: 0.50
-    - plant: BEETROOTS
-      growth: 0.25
-    - plant: MELON_STEM
-      growth: 0.50
-    - plant: PUMPKIN_STEM
-      growth: 0.50
+
 
 # Upgraded crop trampling.
 trample:
@@ -136,5 +60,95 @@ trample:
   upgrade: true
   # Crops are trampled by walking or running over them.
   walk: false
-  # Farmland is trampled back to dirt if there is nothing growing on it.
+  # Farmland can be trampled back to dirt if there is nothing growing on it.
   revertEmpty: true
+
+
+# A list of harvesting tools, their harvest radiï and the damage they take from harvesting crops. Note that if an item
+# has the unbreakable item attribute, it will never take any damage.
+# The radius is a decimal, but is rounded down when used to find surrounding blocks.
+# The first entry that applies to an item, is the one that is used to determine radius and damage. If no entry applies
+# to an item, then the item is not a harvesting tool. An entry may only apply to an item with the same material. If an
+# entry has no material, then it may apply to an item with any material. An entry may only apply to an item which has
+# the same lore as a substring somewhere in its item lore. If an entry has no lore, then it may apply to an item with
+# any lore.
+tools:
+  #    # Permission example - Player must have permission "farmer" to apply the tool.
+  #    - permission: farmer
+  #      radius: 1.5
+  #      damage: 1
+  #    # Fake enchantments
+  #    - lore: Harvest I
+  #      radius: 1.5
+  #      damage: 1
+  #    - lore: Harvest II
+  #      radius: 2.5
+  #      damage: 1
+  # Hoes
+  - material: WOODEN_HOE
+    radius: 0.5
+    damage: 1
+  - material: STONE_HOE
+    radius: 0.5
+    damage: 1
+  - material: IRON_HOE
+    radius: 1.5
+    damage: 1
+  - material: GOLDEN_HOE
+    radius: 1.5
+    damage: 1
+  - material: DIAMOND_HOE
+    radius: 2.5
+    damage: 1
+  - material: NETHERITE_HOE
+    radius: 2.5
+    damage: 1
+  # Swords
+  - material: WOODEN_SWORD
+    radius: 0
+    damage: 2
+  - material: STONE_SWORD
+    radius: 0
+    damage: 2
+  - material: IRON_SWORD
+    radius: 0
+    damage: 2
+  - material: GOLDEN_SWORD
+    radius: 0
+    damage: 2
+  - material: DIAMOND_SWORD
+    radius: 0
+    damage: 2
+  - material: NETHERITE_SWORD
+    radius: 0
+    damage: 2
+
+
+# A list of crops and their seeds.
+crops:
+  - crop: WHEAT
+    seeds: WHEAT_SEEDS
+  - crop: POTATOES
+    seeds: POTATO
+  - crop: CARROTS
+    seeds: CARROT
+  - crop: BEETROOTS
+    seeds: BEETROOT_SEEDS
+  - crop: NETHER_WART
+    seeds: NETHER_WART
+
+
+# A list of fertilisable plants and their expected growth.
+plants:
+  - plant: WHEAT
+    growth: 0.50
+  - plant: POTATOES
+    growth: 0.50
+  - plant: CARROTS
+    growth: 0.50
+  - plant: BEETROOTS
+    growth: 0.25
+  - plant: MELON_STEM
+    growth: 0.50
+  - plant: PUMPKIN_STEM
+    growth: 0.50

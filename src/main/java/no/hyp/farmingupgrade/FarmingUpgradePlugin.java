@@ -19,8 +19,7 @@ import org.bukkit.entity.Item;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.*;
-import org.bukkit.event.player.PlayerInteractEvent;
-import org.bukkit.event.player.PlayerMoveEvent;
+import org.bukkit.event.player.*;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -40,7 +39,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     FarmingUpgradeConfiguration configuration;
 
-    Random random;
+    final Random random = new Random();
 
     /*
      * The plugin replaces Vanilla features by catching events, cancelling them, and then executing its own logic. The
@@ -69,7 +68,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         // Upgrade the configuration if necessary.
         this.configurationUpgrade();
         this.configuration = new FarmingUpgradeConfiguration(this.getConfig());
-        this.random = new Random();
         // Register the event listeners.
         this.getServer().getPluginManager().registerEvents(this, this);
         // Set listeners.
@@ -89,7 +87,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      */
     public void configurationUpgrade() {
         int version = this.getConfig().getInt("version");
-        if (version == 4) {
+        if (version == 5) {
             return;
         } else {
             // Save old config.
@@ -143,13 +141,13 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         return configuration;
     }
 
-    final record FarmingUpgradeConfiguration (
+    record FarmingUpgradeConfiguration (
 
             boolean required,
 
             boolean harvestUpgrade,
 
-            ImmutableList<HarvestToolType> harvestTools,
+            ImmutableList<HarvestToolType> tools,
 
             double harvestRadiusPerEfficiencyLevel,
 
@@ -163,11 +161,13 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
             int harvestReplantDelayMaximum,
 
-            boolean harvestReplantParticles,
+            double harvestReplantParticles,
+
+            double harvestParticles,
 
             boolean harvestCollect,
 
-            ImmutableList<ReplantableCrop> harvestCrops,
+            ImmutableList<ReplantableCrop> crops,
 
             boolean hydrationUpgrade,
 
@@ -181,7 +181,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
             boolean bonemealUpgrade,
 
-            ImmutableList<FertilisablePlant> bonemealPlants,
+            ImmutableList<FertilisablePlant> plants,
 
             boolean trampleUpgrade,
 
@@ -195,23 +195,24 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             this(
                     configuration.getBoolean("required"),
                     configuration.getBoolean("harvest.upgrade"),
-                    readTools(configuration, "harvest.tools"),
+                    readTools(configuration, "tools"),
                     configuration.getDouble("harvest.radiusPerEfficiencyLevel"),
                     configuration.getBoolean("harvest.applyUnbreaking"),
                     configuration.getBoolean("harvest.onlyMature"),
                     configuration.getBoolean("harvest.replant"),
                     configuration.getInt("harvest.replantDelayMinimum"),
                     configuration.getInt("harvest.replantDelayMaximum"),
-                    configuration.getBoolean("harvest.replantParticles"),
+                    configuration.getDouble("harvest.harvestParticles"),
+                    configuration.getDouble("harvest.replantParticles"),
                     configuration.getBoolean("harvest.collect"),
-                    readCrops(configuration, "harvest.crops"),
+                    readCrops(configuration, "crops"),
                     configuration.getBoolean("hydrate.upgrade"),
                     configuration.getInt("hydrate.horizontalRadius"),
                     configuration.getInt("hydrate.upperAltitude"),
                     configuration.getInt("hydrate.lowerAltitude"),
                     configuration.getBoolean("hydrate.dry"),
                     configuration.getBoolean("fertilise.upgrade"),
-                    readPlants(configuration, "fertilise.plants"),
+                    readPlants(configuration, "plants"),
                     configuration.getBoolean("trample.upgrade"),
                     configuration.getBoolean("trample.walk"),
                     configuration.getBoolean("trample.revertEmpty")
@@ -262,7 +263,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
 
         public Optional<HarvestToolType> toolType(ItemStack toolItem) {
-            for (var toolType : harvestTools) {
+            for (var toolType : tools) {
                 // If the type has a material, the item must be of the same material.
                 @Nullable var typeMaterial = toolType.material();
                 if (typeMaterial != null) {
@@ -291,18 +292,18 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
 
         public boolean isCrop(Material type) {
-            for (var crop : harvestCrops) {
+            for (var crop : crops) {
                 if (crop.crop() == type) return true;
             }
             return false;
         }
 
         public Collection<Material> cropMaterials() {
-            return harvestCrops.stream().map(ReplantableCrop::crop).collect(Collectors.toUnmodifiableSet());
+            return crops.stream().map(ReplantableCrop::crop).collect(Collectors.toUnmodifiableSet());
         }
 
         public Optional<Material> seeds(Material material) throws IllegalArgumentException {
-            for (var crop : harvestCrops) {
+            for (var crop : crops) {
                 if (crop.crop() == material) {
                     return Optional.ofNullable(crop.seeds());
                 }
@@ -311,21 +312,27 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
 
         public boolean isFertilisable(Material material) {
-            return bonemealPlants.stream().anyMatch(x -> x.plant() == material);
+            return plants.stream().anyMatch(x -> x.plant() == material);
         }
 
         public Collection<Material> fertilisableMaterials() {
-            return bonemealPlants.stream().map(FertilisablePlant::plant).collect(Collectors.toSet());
+            return plants.stream().map(FertilisablePlant::plant).collect(Collectors.toSet());
         }
 
         public double fertilisableGrowth(Material material) throws IllegalArgumentException {
-            for (var plant : bonemealPlants) {
+            for (var plant : plants) {
                 if (plant.plant() == material) return plant.growth();
             }
             throw new IllegalArgumentException(String.format("Material %s is not fertilisable.", material.name()));
         }
 
     }
+
+    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage) { }
+
+    record ReplantableCrop(Material crop, @Nullable Material seeds) { }
+
+    record FertilisablePlant(Material plant, double growth) { }
 
     /*
      * Harvest upgrade
@@ -419,7 +426,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         // Calculate drops depending on tool.
         Collection<ItemStack> itemDrops = block.getDrops(tool);
         // Break the crop and spawn effects.
-        FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK);
+        var particleScale = configuration().harvestParticles();
+        FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK, particleScale);
         block.setType(Material.AIR);
 
         // Whether a seed has been collected for replanting.
@@ -482,14 +490,15 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             } else {
                 delay = configuration().harvestReplantDelayMinimum() + random.nextInt(range);
             }
+            var replantParticles = configuration().harvestReplantParticles();
             if (delay == 0) {
                 block.setType(state.getType());
-                if (configuration().harvestReplantParticles()) fertiliseEffect(block);
+                if (replantParticles > 0.0) fertiliseEffect(block, replantParticles);
             } else {
                 getServer().getScheduler().runTaskLater(this, () -> {
                     if (block.isEmpty()) {
                         block.setType(state.getType());
-                        if (configuration().harvestReplantParticles()) fertiliseEffect(block);
+                        if (replantParticles > 0.0) fertiliseEffect(block, replantParticles);
                     }
                 }, delay);
             }
@@ -614,7 +623,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
     }
 
-    public void farmlandUpgradedChangeMoisture(Block farmland, int range, int depth, int height, boolean dry) {
+    void farmlandUpgradedChangeMoisture(Block farmland, int range, int depth, int height, boolean dry) {
         if (farmland.getType() == Material.FARMLAND) {
             BlockState state = farmland.getState();
             farmlandDetermineUpgradedMoisture(state, range, depth, height, dry);
@@ -639,7 +648,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
     }
 
-    public void farmlandDetermineUpgradedMoisture(BlockState state, int range, int depth, int height, boolean dry) {
+    void farmlandDetermineUpgradedMoisture(BlockState state, int range, int depth, int height, boolean dry) {
         Material aboveType = state.getBlock().getRelative(0, 1, 0).getType();
         if (!aboveType.isOccluding()) {
             if (isHydrated(Lists.newArrayList(Material.WATER), state.getBlock(), range, height, depth)) {
@@ -673,7 +682,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * @param lowest The lowest height to search in, relative to the block.
      * @return If there is water in the searched region.
      */
-    public boolean isHydrated(Collection<Material> materials, Block block, int radius, int highest, int lowest) {
+    boolean isHydrated(Collection<Material> materials, Block block, int radius, int highest, int lowest) {
         var i = -radius;
         while (i <= radius) {
             var k = -radius;
@@ -710,7 +719,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * A fertilise event is either called by the server when a player tries to fertilise a crop, or by the plugin.
      */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onFertilise(BlockFertilizeEvent e) {
+    void onFertilise(BlockFertilizeEvent e) {
         if (!configuration().bonemealUpgrade()) return; // Only handle if upgraded fertilisation is enabled.
         if (callingFertiliseEvent) return; // Do not handle delegated BlockFertilizeEvents.
         var block = e.getBlock();
@@ -739,7 +748,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             // If the event is allowed, apply fertiliser.
             if (!upgradedEvent.isCancelled()) {
                 fertilisedState.update();
-                FarmingUpgradePlugin.fertiliseEffect(fertilisedBlock);
+                FarmingUpgradePlugin.fertiliseEffect(fertilisedBlock, 1.0);
             }
             if (remainingGrowthStages <= 0) {
                 break;
@@ -775,7 +784,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * If upgraded trampling is not enabled, do not handle this event.
      */
     @EventHandler(priority = EventPriority.LOWEST)
-    public void onFarmlandTrample(PlayerInteractEvent event) {
+    void onFarmlandTrample(PlayerInteractEvent event) {
         if (!configuration().trampleUpgrade()) return;
         if (callingPlayerInteractEvent) return; // Do not handle events that are called by FarmingUpgrade.
         // If trample upgrade is enabled, handle trampling. Otherwise, let Minecraft
@@ -801,7 +810,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * crops will be trampled when walked over.
      */
     @EventHandler(priority = EventPriority.MONITOR)
-    public void onWalk(PlayerMoveEvent event) {
+    void onWalk(PlayerMoveEvent event) {
         if (event.isCancelled()) return;
         if (!(configuration.trampleUpgrade() && configuration.trampleWalk())) return;
         var player = event.getPlayer();
@@ -839,7 +848,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             callingBlockFadeEvent = false;
             if (!fadeEvent.isCancelled()) {
                 state.update(true);
-                breakBlockEffect(crop, oldState, Sound.BLOCK_CROP_BREAK);
+                var particleScale = configuration().harvestParticles();
+                breakBlockEffect(crop, oldState, Sound.BLOCK_CROP_BREAK, particleScale);
             }
         }
     }
@@ -851,7 +861,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     /**
      * Use Bernoulli trials to determine how many growth stages to add to a crop.
      */
-    public static int trialGrow(Random random, int trials, double probability, BlockState state) {
+    static int trialGrow(Random random, int trials, double probability, BlockState state) {
         var stageDifference = 0;
         var data = state.getBlockData();
         if (data instanceof Ageable ageable) {
@@ -874,20 +884,20 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         return stageDifference;
     }
 
-    public static void breakBlockEffect(Block block, BlockState state, Sound sound) {
-        breakBlockEffect(block, state, sound, 0);
+    static void breakBlockEffect(Block block, BlockState state, Sound sound, double particleScale) {
+        breakBlockEffect(block, state, sound, 0, particleScale);
     }
 
-    public static void breakBlockEffect(Block block, BlockState state, Sound sound, int radius) {
+    static void breakBlockEffect(Block block, BlockState state, Sound sound, int radius, double particleScale) {
         var particles = (10 * (2 * radius + 1)) / (4 * radius * radius + 4 * radius + 1);
         var location = block.getLocation().add(0.5, 0.5, 0.5);
-        location.getWorld().spawnParticle(Particle.BLOCK_CRACK, location, particles, 0.5, 0.5, 0.5, state.getBlockData());
+        location.getWorld().spawnParticle(Particle.BLOCK_CRACK, location, (int) (particles * particleScale), 0.5, 0.5, 0.5, state.getBlockData());
         location.getWorld().playSound(location, sound, 1, 1);
     }
 
-    public static void fertiliseEffect(Block block) {
+    static void fertiliseEffect(Block block, double particleScale) {
         var location = block.getLocation().add(0.5, 0.5, 0.375);
-        location.getWorld().spawnParticle(Particle.COMPOSTER, location, 15, 0.4, 0.4, 0.35);
+        location.getWorld().spawnParticle(Particle.COMPOSTER, location, (int) (15 * particleScale), 0.4, 0.4, 0.35);
     }
 
     /**
@@ -898,7 +908,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * @param tool The item to take damage.
      * @param damage The amount of damage to apply.
      */
-    static boolean damageTool(Random random, Player player, ItemStack tool, int damage, boolean applyUnbreaking) {
+    boolean damageTool(Random random, Player player, ItemStack tool, int damage, boolean applyUnbreaking) {
         if (!(player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE)) return false;
         if (tool.getType().isAir()) return false;
         var itemMeta = tool.getItemMeta();
@@ -917,13 +927,20 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
     }
 
-    static boolean damageTool(Player player, ItemStack tool, int damage) {
+    boolean damageTool(Player player, ItemStack tool, int damage) {
         boolean destroyed;
         var meta = tool.getItemMeta();
         if (meta instanceof Damageable damageable) {
-            damageable.setDamage(damageable.getDamage() + damage);
-            tool.setItemMeta(meta);
-            destroyed = damageable.getDamage() >= tool.getType().getMaxDurability();
+            var damageEvent = new PlayerItemDamageEvent(player, tool, damage);
+            this.getServer().getPluginManager().callEvent(damageEvent);
+            if (!damageEvent.isCancelled()) {
+                var eventDamage = damageEvent.getDamage();
+                damageable.setDamage(damageable.getDamage() + eventDamage);
+                tool.setItemMeta(meta);
+                destroyed = damageable.getDamage() >= tool.getType().getMaxDurability();
+            } else {
+                destroyed = false;
+            }
         } else {
             destroyed = false;
         }
@@ -940,9 +957,10 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * Check if a block is fully grown.
      *
      * @param block The block.
-     * @return If the block is fully grown or not. Empty if the block is not Ageable.
+     * @return If the block is fully grown or not. Empty if the block is not
+     * {@link org.bukkit.block.data.Ageable Ageable}.
      */
-    public static Optional<Boolean> isMature(Block block) {
+    static Optional<Boolean> isMature(Block block) {
         var data = block.getBlockData();
         if (data instanceof Ageable ageable) {
             return Optional.of(ageable.getAge() == ageable.getMaximumAge());
@@ -951,15 +969,209 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
     }
 
-    public static Set<Block> findAdjacentMaterials(Collection<Material> materials, Block centre, int radius) {
-        var adjacent = new HashSet<Block>();
-        adjacent.add(centre);
-        int r = 1;
-        while (r <= radius) {
-            adjacent.addAll(findAdjacentMaterialsRadius(materials, centre, r));
-            r++;
+    /**
+     * Find all horizontally adjacent blocks.
+     *
+     * @param materials
+     * @param centre
+     * @param radius
+     * @return
+     */
+    Collection<Block> findAdjacentMaterials(Collection<Material> materials, Block centre, int radius) {
+        var diameter = radius + radius + 1;
+        var centreIndex = gridIndex(diameter, radius, 0, 0);
+        var adjacent = new Block[diameter * diameter]; // Nullable block array representing a square.
+        // In some cases where packets
+        if (!materials.contains(centre.getType())) {
+            getLogger().warning("Centre material was removed too quickly! Could not find adjacent materials.");
+            return Collections.emptyList();
         }
-        return adjacent;
+        adjacent[centreIndex] = centre;
+        // +x axis
+        {
+            var previous = centre;
+            var i = 1;
+            while (i <= radius) {
+                @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, 0, previous).orElse(null);
+                if (foundAdjacent == null) break;
+                adjacent[gridIndex(diameter, radius, i, 0)] = foundAdjacent;
+                previous = foundAdjacent;
+                i++;
+            }
+        }
+        // -x axis
+        {
+            var previous = centre;
+            var i = -1;
+            while (i >= -radius) {
+                @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, 0, previous).orElse(null);
+                if (foundAdjacent == null) break;
+                adjacent[gridIndex(diameter, radius, i, 0)] = foundAdjacent;
+                previous = foundAdjacent;
+                i--;
+            }
+        }
+        // +z axis
+        {
+            var previous = centre;
+            var k = 1;
+            while (k <= radius) {
+                @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, 0, k, previous).orElse(null);
+                if (foundAdjacent == null) break;
+                adjacent[gridIndex(diameter, radius, 0, k)] = foundAdjacent;
+                previous = foundAdjacent;
+                k++;
+            }
+        }
+        // -z axis
+        {
+            var previous = centre;
+            var k = -1;
+            while (k >= -radius) {
+                @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, 0, k, previous).orElse(null);
+                if (foundAdjacent == null) break;
+                adjacent[gridIndex(diameter, radius, 0, k)] = foundAdjacent;
+                previous = foundAdjacent;
+                k--;
+            }
+        }
+        // +x, +z corners
+        {
+            int i = 1;
+            while (i <= radius) {
+                int k = 1;
+                while (k <= radius) {
+                    @Nullable var p1 = adjacent[gridIndex(diameter, radius, i - 1, k)];
+                    @Nullable var p2 = adjacent[gridIndex(diameter, radius, i, k - 1)];
+                    if (p1 == null && p2 == null) {
+                        k++;
+                        continue;
+                    }
+                    @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, k, p1, p2).orElse(null);
+                    if (foundAdjacent == null) {
+                        k++;
+                        continue;
+                    }
+                    adjacent[gridIndex(diameter, radius, i, k)] = foundAdjacent;
+                    k++;
+                }
+                i++;
+            }
+        }
+        // -x, +z corners
+        {
+            int i = -1;
+            while (i >= -radius) {
+                int k = 1;
+                while (k <= radius) {
+                    @Nullable var p1 = adjacent[gridIndex(diameter, radius, i + 1, k)];
+                    @Nullable var p2 = adjacent[gridIndex(diameter, radius, i, k - 1)];
+                    if (p1 == null && p2 == null) {
+                        k++;
+                        continue;
+                    }
+                    @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, k, p1, p2).orElse(null);
+                    if (foundAdjacent == null) {
+                        k++;
+                        continue;
+                    }
+                    adjacent[gridIndex(diameter, radius, i, k)] = foundAdjacent;
+                    k++;
+                }
+                i--;
+            }
+        }
+        // -x, -z corners
+        {
+            int i = -1;
+            while (i >= -radius) {
+                int k = -1;
+                while (k >= -radius) {
+                    @Nullable var p1 = adjacent[gridIndex(diameter, radius, i + 1, k)];
+                    @Nullable var p2 = adjacent[gridIndex(diameter, radius, i, k + 1)];
+                    if (p1 == null && p2 == null) {
+                        k--;
+                        continue;
+                    }
+                    @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, k, p1, p2).orElse(null);
+                    if (foundAdjacent == null) {
+                        k--;
+                        continue;
+                    }
+                    adjacent[gridIndex(diameter, radius, i, k)] = foundAdjacent;
+                    k--;
+                }
+                i--;
+            }
+        }
+        // +x, -z corners
+        {
+            int i = 1;
+            while (i <= radius) {
+                int k = -1;
+                while (k >= -radius) {
+                    @Nullable var p1 = adjacent[gridIndex(diameter, radius, i - 1, k)];
+                    @Nullable var p2 = adjacent[gridIndex(diameter, radius, i, k + 1)];
+                    if (p1 == null && p2 == null) {
+                        k--;
+                        continue;
+                    }
+                    @Nullable var foundAdjacent = locateAdjacentBlock(materials, centre, i, k, p1, p2).orElse(null);
+                    if (foundAdjacent == null) {
+                        k--;
+                        continue;
+                    }
+                    adjacent[gridIndex(diameter, radius, i, k)] = foundAdjacent;
+                    k--;
+                }
+                i++;
+            }
+        }
+        var adjacentSet = new ArrayList<Block>();
+        for (@Nullable var block : adjacent) {
+            if (block != null) adjacentSet.add(block);
+        }
+        return adjacentSet;
+    }
+
+    /**
+     * Convert relative coördinates to grid coördinates.
+     *
+     * @param diameter
+     * @param radius
+     * @param i
+     * @param k
+     * @return
+     */
+    static int gridIndex(int diameter, int radius, int i, int k) {
+        return ((i + radius) * diameter) + (k + radius);
+    }
+
+    /**
+     *
+     * @param materials
+     * @param centre
+     * @param i
+     * @param k
+     * @param adjacents Nullable adjacent blocks.
+     * @return
+     */
+    static Optional<Block> locateAdjacentBlock(Collection<Material> materials, Block centre, int i, int k, Block... adjacents) {
+        for (@Nullable var adjacent : adjacents) {
+            if (adjacent == null) continue;
+            var j = adjacent.getY() - centre.getY();
+            var above = centre.getRelative(i, j + 1, k);
+            var aboveType = above.getType();
+            if (materials.contains(aboveType)) return Optional.of(above);
+            var beside = centre.getRelative(i, j, k);
+            var besideType = beside.getType();
+            if (materials.contains(besideType)) return Optional.of(beside);
+            if (!beside.isPassable()) continue;
+            var below = centre.getRelative(i, j - 1, k);
+            var belowType = below.getType();
+            if (materials.contains(belowType)) return Optional.of(below);
+        }
+        return Optional.empty();
     }
 
     /**
@@ -970,7 +1182,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * @param radius The radius of the ring.
      * @return The blocks in the ring whose material matches one of those searched for.
      */
-    public static Set<Block> findAdjacentMaterialsRadius(Collection<Material> materials, Block centre, int radius) {
+    static Set<Block> findAdjacentMaterialsRadius(Collection<Material> materials, Block centre, int radius) {
         var ring = new HashSet<Block>();
         // Centre coordinates.
         var world = centre.getWorld();
@@ -1015,7 +1227,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * @param lowest Lowest y coordinate.
      * @return The highest block of one of the materials in the column, otherwise empty.
      */
-    public static Optional<Block> findHighestMaterial(Collection<Material> materials, World world, int x, int z, int highest, int lowest) {
+    static Optional<Block> findHighestMaterial(Collection<Material> materials, World world, int x, int z, int highest, int lowest) {
         var y = highest;
         while (y >= lowest) {
             var block = world.getBlockAt(x, y, z);
@@ -1026,11 +1238,5 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
         return Optional.empty();
     }
-
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage) { }
-
-    record ReplantableCrop(Material crop, @Nullable Material seeds) { }
-
-    record FertilisablePlant(Material plant, double growth) { }
 
 }
