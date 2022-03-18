@@ -923,6 +923,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         if (meta instanceof Damageable damageable) {
             damageable.setDamage(damageable.getDamage() + damage);
             tool.setItemMeta(meta);
+            PlayerItemDamageEvent event = new PlayerItemDamageEvent(player, tool, damage);
+            Bukkit.getPluginManager().callEvent(event);
             destroyed = damageable.getDamage() >= tool.getType().getMaxDurability();
         } else {
             destroyed = false;
