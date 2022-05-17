@@ -24,6 +24,7 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.Damageable;
+import org.bukkit.permissions.*;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
@@ -224,13 +225,15 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             var toolSectionMaps = (List<Map<?, ?>>) configuration.getList(path);
             for (var toolSectionMap : toolSectionMaps) {
                 var toolSection = new MemoryConfiguration().createSection("section", toolSectionMap);
-                @Nullable var materialString = toolSection.getString("material");
+                @Nullable var materialString = toolSection.getString("material", null);
                 @Nullable var material = materialString != null ? Material.matchMaterial(materialString) : null;
-                @Nullable var lore = toolSection.getString("lore");
-                @Nullable var permission = toolSection.getString("permission");
-                var radius = toolSection.getDouble("radius");
-                var damage = toolSection.getInt("damage");
-                tools.add(new HarvestToolType(material, lore, permission, radius, damage));
+                @Nullable var lore = toolSection.getString("lore", null);
+                @Nullable var permission = toolSection.getString("permission", null);
+                var radius = toolSection.getDouble("radius", 0);
+                var damage = toolSection.getInt("damage", 1);
+                var replant = toolSection.getBoolean("replant", true);
+                var collect = toolSection.getBoolean("collect", true);
+                tools.add(new HarvestToolType(material, lore, permission, radius, damage, replant, collect));
             }
             return ImmutableList.copyOf(tools);
         }
@@ -262,7 +265,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             return ImmutableList.copyOf(plants);
         }
 
-        public Optional<HarvestToolType> toolType(ItemStack toolItem) {
+        public LinkedList<HarvestToolType> toolType(ItemStack toolItem) {
+            var list = new LinkedList<HarvestToolType>();
             for (var toolType : tools) {
                 // If the type has a material, the item must be of the same material.
                 @Nullable var typeMaterial = toolType.material();
@@ -286,9 +290,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     }
                     if (!foundLore) continue;
                 }
-                return Optional.of(toolType);
+                list.add(toolType);
             }
-            return Optional.empty();
+            return list;
         }
 
         public boolean isCrop(Material type) {
@@ -328,7 +332,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     }
 
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage) { }
+    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage, boolean replant, boolean collect) { }
 
     record ReplantableCrop(Material crop, @Nullable Material seeds) { }
 
@@ -353,10 +357,21 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var centre = event.getBlock();
         if (!configuration.isCrop(centre.getType())) return; // Farming only applies to crops.
         var toolItem = player.getInventory().getItemInMainHand();
-        @Nullable var toolType = configuration().toolType(toolItem).orElse(null);
+        @Nullable HarvestToolType toolType = null;
+        for (var maybeToolType : configuration().toolType(toolItem)) {
+            @Nullable var permissionString = maybeToolType.permission();
+            if (permissionString == null) {
+                toolType = maybeToolType;
+                break;
+            }
+            @Nullable Permission permission = getServer().getPluginManager().getPermission(permissionString);
+            if (permission == null) continue; // The player does not have the tool permission because it does not exist.
+            if (player.hasPermission(permission)) {
+                toolType = maybeToolType;
+                break;
+            }
+        }
         if (toolType == null) return; // If the crop was not broken by a harvest tool, proceed with Vanilla mechanics.
-        @Nullable var permission = toolType.permission();
-        if (permission != null && !player.hasPermission(permission)) return; // The player must have the tool permission to use the tool.
         event.setCancelled(true); // Cancel the Vanilla event to cancel the Vanilla mechanics.
         initiateHarvest(player, toolType, toolItem, centre);
     }
@@ -370,9 +385,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var radius = calculateRadius(toolType, toolItem);
         var cropMaterials = configuration().cropMaterials();
         var adjacentCropBlocks = findAdjacentMaterials(cropMaterials, centre, radius);
-        var replant = configuration().harvestReplant();
+        var replant = configuration().harvestReplant() && toolType.replant();
         var applyUnbreaking = configuration().harvestApplyUnbreaking();
-        var collect = configuration().harvestCollect();
+        var collect = configuration().harvestCollect() && toolType.collect();
         var onlyMature = configuration().harvestOnlyMature();
         for (var adjacentCropBlock : adjacentCropBlocks) {
             @Nullable var seeds = configuration().seeds(adjacentCropBlock.getType()).orElse(null);
@@ -511,7 +526,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      */
 
     /**
-     * TODO: Ugly hack
+     * TODO: Kinda ugly, but no better way currently
      *
      * When a player tramples farmland, Bukkit calls a PlayerInteractEvent, and then
      * a BlockFadeEvent. Minecraft also calls FadeEvent when a Farmland is turning to
@@ -971,11 +986,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     /**
      * Find all horizontally adjacent blocks.
-     *
-     * @param materials
-     * @param centre
-     * @param radius
-     * @return
      */
     Collection<Block> findAdjacentMaterials(Collection<Material> materials, Block centre, int radius) {
         var diameter = radius + radius + 1;
@@ -1135,26 +1145,14 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     }
 
     /**
-     * Convert relative coördinates to grid coördinates.
-     *
-     * @param diameter
-     * @param radius
-     * @param i
-     * @param k
-     * @return
+     * Convert relative coordinates to grid coordinates.
      */
     static int gridIndex(int diameter, int radius, int i, int k) {
         return ((i + radius) * diameter) + (k + radius);
     }
 
     /**
-     *
-     * @param materials
-     * @param centre
-     * @param i
-     * @param k
      * @param adjacents Nullable adjacent blocks.
-     * @return
      */
     static Optional<Block> locateAdjacentBlock(Collection<Material> materials, Block centre, int i, int k, Block... adjacents) {
         for (@Nullable var adjacent : adjacents) {

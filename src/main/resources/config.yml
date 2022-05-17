@@ -64,26 +64,41 @@ trample:
   revertEmpty: true
 
 
-# A list of harvesting tools, their harvest radiï and the damage they take from harvesting crops. Note that if an item
-# has the unbreakable item attribute, it will never take any damage.
-# The radius is a decimal, but is rounded down when used to find surrounding blocks.
-# The first entry that applies to an item, is the one that is used to determine radius and damage. If no entry applies
-# to an item, then the item is not a harvesting tool. An entry may only apply to an item with the same material. If an
-# entry has no material, then it may apply to an item with any material. An entry may only apply to an item which has
-# the same lore as a substring somewhere in its item lore. If an entry has no lore, then it may apply to an item with
-# any lore.
+# A list of harvesting tools and their properties.
+# - Note that if an item has the unbreakable item attribute, it will never take any damage.
+# - Damage determines how much damage a tool takes when harvesting one crop.
+# - The radius is a decimal, but the final result from calculations is rounded down when used to find surrounding
+#   blocks. 0 radius means that only the clicked block is found.
+# - The first entry that applies to an item, is the one that is used to determine tool properties. If no entry applies
+#   to an item, then the item is not a harvesting tool.
+# - An entry may only apply to an item with the same material. If an entry has no material, then it may apply to an item
+#   with any material.
+# - An entry may only apply to an item which has the same lore as a substring somewhere in its item lore. If an entry
+#   has no lore, then it may apply to an item with any lore.
+# - The replant property can be true or false and determines if a tool replants. It is true by default.
+# - The collect property can be true or false and determines if a tool collects. It is true by default.
 tools:
-  #    # Permission example - Player must have permission "farmer" to apply the tool.
+
+  # Permission example - Player must have permission "farmer" to apply the tool.
   #    - permission: farmer
   #      radius: 1.5
   #      damage: 1
-  #    # Fake enchantments
+
+  # Fake lore enchantments
   #    - lore: Harvest I
   #      radius: 1.5
   #      damage: 1
   #    - lore: Harvest II
   #      radius: 2.5
   #      damage: 1
+
+  # Example of permission disabling replant for wooden hoes.
+  #    - material: WOODEN_HOE
+  #      radius: 0.5
+  #      damage: 1
+  #      permission: noreplant
+  #      replant: false
+
   # Hoes
   - material: WOODEN_HOE
     radius: 0.5
@@ -103,6 +118,7 @@ tools:
   - material: NETHERITE_HOE
     radius: 2.5
     damage: 1
+
   # Swords
   - material: WOODEN_SWORD
     radius: 0
