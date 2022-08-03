@@ -945,13 +945,15 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     boolean damageTool(Player player, ItemStack tool, int damage) {
         boolean destroyed;
         var meta = tool.getItemMeta();
-        if (meta instanceof Damageable damageable) {
+        if (meta instanceof Damageable) {
             var damageEvent = new PlayerItemDamageEvent(player, tool, damage);
             this.getServer().getPluginManager().callEvent(damageEvent);
             if (!damageEvent.isCancelled()) {
+                ItemStack itemInMainHand = player.getInventory().getItemInMainHand();
+                Damageable damageable = (Damageable) itemInMainHand.getItemMeta();
                 var eventDamage = damageEvent.getDamage();
                 damageable.setDamage(damageable.getDamage() + eventDamage);
-                tool.setItemMeta(meta);
+                itemInMainHand.setItemMeta(damageable);
                 destroyed = damageable.getDamage() >= tool.getType().getMaxDurability();
             } else {
                 destroyed = false;
