@@ -19,6 +19,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.block.*;
 import org.bukkit.event.player.*;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
@@ -496,59 +497,27 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK, particleScale);
         block.setType(Material.AIR);
 
-        // Whether a seed has been collected for replanting.
-        boolean seedFound = false;
+        // A seed that can replant the crop.
+        @Nullable ItemStack foundSeed = null;
         GameMode mode = player.getGameMode();
-        // Drop items in survival.
-        if (upgradedEvent.isDropItems() && mode != GameMode.CREATIVE) {
-            // Search for a seed to replant the crop with if replanting is enabled.
-            if (replant) {
-                for (ItemStack itemDrop : itemDrops) {
-                    // If replanting is enabled, and a seed is not found yet, search for one in this ItemStack.
-                    if (!seedFound) {
-                        int amount = itemDrop.getAmount();
-                        if (itemDrop.getType() == seed && amount >= 1) {
-                            itemDrop.setAmount(amount - 1);
-                            seedFound = true;
-                        }
+        // If event disallows drops, do not drop anything, nor a replanting seed.
+        if (!upgradedEvent.isDropItems()) itemDrops.clear();
+        // Search for a seed to replant the crop with if replanting is enabled.
+        if (replant) {
+            for (ItemStack itemDrop : itemDrops) {
+                // If replanting is enabled, and a seed is not found yet, search for one in this ItemStack.
+                if (foundSeed == null) {
+                    int amount = itemDrop.getAmount();
+                    if (itemDrop.getType() == seed && amount >= 1) {
+                        foundSeed = itemDrop.clone();
+                        foundSeed.setAmount(1);
+                        itemDrop.setAmount(amount - 1);
                     }
                 }
             }
-            // If collect is enabled, items are sent to the inventory if there is space.
-            if (collect) {
-                Inventory inventory = player.getInventory();
-                Set<ItemStack> notAddedItems = new HashSet<>();
-                for (ItemStack item : itemDrops) {
-                    notAddedItems.addAll(inventory.addItem(item).values());
-                }
-                itemDrops = notAddedItems;
-                // player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 0.75f + random.nextFloat() * 0.5f);
-            }
-            // Calculate the dropped item entities.
-            List<Item> drops = new ArrayList<>();
-            for (ItemStack itemDrop : itemDrops) {
-                if (itemDrop.getType().isItem() && itemDrop.getType() != Material.AIR && itemDrop.getAmount() >= 1) {
-                    drops.add(block.getWorld().dropItemNaturally(block.getLocation(), itemDrop));
-                }
-            }
-            // Send a BlockDropItemEvent for the drops.
-            List<Item> copy = Lists.newArrayList(drops);
-            BlockDropItemEvent dropEvent = new BlockDropItemEvent(block, state, player, copy);
-            Bukkit.getServer().getPluginManager().callEvent(dropEvent);
-            // Kill those items that were removed from the copied drop list, or all of them
-            // if the event is cancelled.
-            if (dropEvent.isCancelled()) {
-                copy.clear();
-            }
-            for (Item drop : drops) {
-                if (!copy.contains(drop)) {
-                    drop.remove();
-                }
-            }
         }
-        if (mode == GameMode.CREATIVE && replant) seedFound = true; // A crop is always replanted in creative mode.
-        // Replant the crop if a seed was found or the player is in creative mode.
-        if (seedFound) {
+        // Replant the crop if a seed was found.
+        if (foundSeed != null) {
             var delayRange = toolUpgrade.maximumReplantDelay - toolUpgrade.minimumReplantDelay;
             int delay;
             if (delayRange == 0) {
@@ -558,15 +527,84 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             }
             var replantParticlesMultiplier = toolUpgrade.replantParticleMultiplier;
             if (delay == 0) {
+                // Send a BlockPlaceEvent for the replanted crop.
+                var replacedState = block.getState();
                 block.setType(state.getType());
-                if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
+                var plantEvent = new BlockPlaceEvent(block, replacedState, block.getRelative(0, -1, 0), foundSeed.clone(), player, true, EquipmentSlot.HAND);
+                callingBlockPlaceEvent = true;
+                this.getServer().getPluginManager().callEvent(plantEvent);
+                callingBlockPlaceEvent = false;
+                if (plantEvent.isCancelled() || !plantEvent.canBuild()) {
+                    // If cancelled, revert block state to air and add seed to drops.
+                    replacedState.update();
+                    itemDrops.add(foundSeed);
+                } else {
+                    if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
+                }
             } else {
+                final @Nullable var finalFoundSeed = foundSeed;
+                boolean drop = upgradedEvent.isDropItems() || mode != GameMode.CREATIVE;
                 getServer().getScheduler().runTaskLater(this, () -> {
-                    if (block.isEmpty()) {
-                        block.setType(state.getType());
-                        if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
+                    // Player must be online for a BlockPlaceEvent to happen, otherwise weird stuff could happen.
+                    if (player.isOnline()) {
+                        if (block.isEmpty()) {
+                            var replacedState = block.getState();
+                            block.setType(state.getType());
+                            var plantEvent = new BlockPlaceEvent(block, replacedState, block.getRelative(0, -1, 0), finalFoundSeed.clone(), player, true, EquipmentSlot.HAND);
+                            callingBlockPlaceEvent = true;
+                            this.getServer().getPluginManager().callEvent(plantEvent);
+                            callingBlockPlaceEvent = false;
+                            if (plantEvent.isCancelled() || !plantEvent.canBuild()) {
+                                replacedState.update();
+                                if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
+                            } else {
+                                if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
+                            }
+                        } else {
+                            if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
+                        }
+                    } else {
+                        if (block.isEmpty()) {
+                            block.setType(state.getType());
+                            if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
+                        } else {
+                            if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
+                        }
                     }
                 }, delay);
+            }
+        }
+        // Clear all drops if in creative.
+        if (mode == GameMode.CREATIVE) itemDrops.clear();
+        // If collect is enabled, items are sent to the inventory if there is space.
+        if (collect) {
+            Inventory inventory = player.getInventory();
+            Set<ItemStack> notAddedItems = new HashSet<>();
+            for (ItemStack item : itemDrops) {
+                notAddedItems.addAll(inventory.addItem(item).values());
+            }
+            itemDrops = notAddedItems;
+            // player.playSound(player.getLocation(), Sound.ENTITY_ITEM_PICKUP, 0.2f, 0.75f + random.nextFloat() * 0.5f);
+        }
+        // Calculate the dropped item entities.
+        List<Item> drops = new ArrayList<>();
+        for (ItemStack itemDrop : itemDrops) {
+            if (itemDrop.getType().isItem() && itemDrop.getType() != Material.AIR && itemDrop.getAmount() >= 1) {
+                drops.add(block.getWorld().dropItemNaturally(block.getLocation(), itemDrop));
+            }
+        }
+        // Send a BlockDropItemEvent for the drops.
+        List<Item> copy = Lists.newArrayList(drops);
+        BlockDropItemEvent dropEvent = new BlockDropItemEvent(block, state, player, copy);
+        Bukkit.getServer().getPluginManager().callEvent(dropEvent);
+        // Kill those items that were removed from the copied drop list, or all of them
+        // if the event is cancelled.
+        if (dropEvent.isCancelled()) {
+            copy.clear();
+        }
+        for (Item drop : drops) {
+            if (!copy.contains(drop)) {
+                drop.remove();
             }
         }
         return true;
@@ -630,9 +668,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 var aboveFarmland = farmland.getRelative(0, 1, 0);
                 if (aboveFarmland.getType() != Material.AIR) continue;
                 var placeEvent = new BlockPlaceEvent(aboveFarmland, aboveFarmland.getState(), farmland, event.getItemInHand(), player, event.canBuild()); //TODO canBuild
-                callingBlockPlaceEvent = true;
                 var savedState = aboveFarmland.getState();
                 aboveFarmland.setType(cropType);
+                callingBlockPlaceEvent = true;
                 getServer().getPluginManager().callEvent(placeEvent);
                 callingBlockPlaceEvent = false;
                 if (placeEvent.isCancelled() || !placeEvent.canBuild()) {

@@ -165,8 +165,8 @@ bonemealUpgrade:
   # Radius of upgraded bonemeal. Make sure to also adjust plant growth rate when changing the radius.
   radius: 1
   # Number of trials to run for each crop. Adjust growth chance during each trial below.
-  # If you increase one of radius, trials, or growth chance, you can balance by decreasing the others.
   trials: 8
+  # Target growth stages for one bonemeal. This determines the maximum growth per bonemeal.
   targetGrowthStages: 8
   # Ticks until the bonemeal affects a fertilised crop.
   minimumDelay: 400
