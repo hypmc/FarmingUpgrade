@@ -1,5 +1,5 @@
 # FarmingUpgrade configuration
-# Default configuration: https://github.com/Torm/FarmingUpgrade/blob/master/src/main/resources/config.yml
+# Default configuration: https://github.com/hypmc/FarmingUpgrade/blob/master/src/main/resources/config.yml
 # List of materials: https://hub.spigotmc.org/javadocs/spigot/org/bukkit/Material.html
 
 
@@ -20,9 +20,6 @@ toolUpgrade:
   applyUnbreaking: true
   # Harvesting tools only break mature crops.
   onlyHarvestMature: true
-  # Replant a crop automatically after harvesting it if a seed is dropped.
-  # This is a default value for every tool. This can be overridden by specific tool properties.
-  replantDefault: true
   # Minimum and maximum number of ticks to wait between harvesting and replanting. A random number in the range is sampled.
   # Set both to 0 to replant instantly.
   replantDelayMinimum: 10
@@ -32,6 +29,11 @@ toolUpgrade:
   harvestParticleMultiplier: 1.0
   replantParticleMultiplier: 1.0
   plantParticleMultiplier: 1.0
+  # Show the tool swing particle effect when harvesting.
+  toolSwingParticleEffect: true
+  # Replant a crop automatically after harvesting it if a seed is dropped.
+  # This is a default value for every tool. This can be overridden by specific tool properties.
+  replantDefault: true
   # Dropped items from crops broken by a hoe are collected in the player's inventory if there is space.
   # This is a default value for every tool. This can be overridden by specific tool properties.
   collectDefault: false
@@ -141,7 +143,6 @@ toolUpgrade:
       damage: 2
 
 
-
 # Upgraded water search and Farmland hydration mechanics.
 # Remove, rename or comment out this section to disable the upgraded hydration feature.
 # Use upgraded water search to hydrate Farmland. (Vanilla: false)
@@ -168,9 +169,9 @@ bonemealUpgrade:
   trials: 8
   # Target growth stages for one bonemeal. This determines the maximum growth per bonemeal.
   targetGrowthStages: 8
-  # Ticks until the bonemeal affects a fertilised crop.
-  minimumDelay: 400
-  maximumDelay: 1200
+  # Ticks until the bonemeal affects a fertilised crop. Set both to 0 to fertilise instantly.
+  minimumDelay: 0
+  maximumDelay: 0
   fertiliseParticleMultiplier: 1.0
   # A list of fertilisable plants and their expected growth.
   plants:
@@ -188,7 +189,6 @@ bonemealUpgrade:
       growth: 0.50
 
 
-
 # Upgraded crop trampling.
 # Remove, rename or comment out this section to disable the upgraded crop trampling feature.
 # Crops are trampled (reset to their first growth stage) instead of Farmland. (Vanilla: false)
@@ -200,8 +200,3 @@ trampleUpgrade:
   trampleParticleMultiplier: 1.0
   # A list of crops that can be trampled.
   trampleableCrops: [ WHEAT, MELON_STEM, PUMPKIN_STEM ]
-
-
-
-
-

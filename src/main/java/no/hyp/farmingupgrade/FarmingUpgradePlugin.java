@@ -162,19 +162,21 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var radiusPerEfficiencyLevel = configuration.getDouble("toolUpgrade.radiusPerEfficiencyLevel");
         var applyUnbreaking = configuration.getBoolean("toolUpgrade.applyUnbreaking");
         var onlyHarvestMature = configuration.getBoolean("toolUpgrade.onlyHarvestMature");
-        var replantDefault = configuration.getBoolean("toolUpgrade.replantDefault");
         var minimumReplantDelay = configuration.getInt("toolUpgrade.replantDelayMinimum");
         var maximumReplantDelay = configuration.getInt("toolUpgrade.replantDelayMaximum");
         var harvestParticleMultiplier = configuration.getDouble("toolUpgrade.harvestParticleMultiplier");
         var replantParticleMultiplier = configuration.getDouble("toolUpgrade.replantParticleMultiplier");
         var plantParticleMultiplier = configuration.getDouble("toolUpgrade.plantParticleMultiplier");
+        var toolSwingParticleEffect = configuration.getBoolean("toolUpgrade.toolSwingParticleEffect");
+        var replantDefault = configuration.getBoolean("toolUpgrade.replantDefault");
         var collectDefault = configuration.getBoolean("toolUpgrade.collectDefault");
         var plantDefault = configuration.getBoolean("toolUpgrade.plantDefault");
         var tools = readTools(configuration, replantDefault, collectDefault, plantDefault);
         var crops = readCrops(configuration);
         return new ToolUpgrade(
                 tools, crops, radiusPerEfficiencyLevel, applyUnbreaking, onlyHarvestMature, minimumReplantDelay,
-                maximumReplantDelay, replantParticleMultiplier, harvestParticleMultiplier, plantParticleMultiplier
+                maximumReplantDelay, replantParticleMultiplier, harvestParticleMultiplier, plantParticleMultiplier,
+                toolSwingParticleEffect
         );
     }
 
@@ -275,7 +277,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             int maximumReplantDelay,
             double replantParticleMultiplier,
             double harvestParticleMultiplier,
-            double plantParticleMultiplier
+            double plantParticleMultiplier,
+            boolean toolSwingParticleEffect
     ) {
 
         public Optional<HarvestToolType> toolType(Player player, ItemStack toolItem) {
@@ -429,10 +432,10 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
      * Called when a player uses a harvest tool on a crop.
      */
     void initiateHarvest(Player player, HarvestToolType toolType, ItemStack toolItem, Block centre) {
-        harvestSwingParticles(player);
+        assert toolUpgrade != null;
+        if (toolUpgrade.toolSwingParticleEffect()) harvestSwingParticles(player);
         var toolDamage = toolType.damage();
         var radius = calculateRadius(toolType, toolItem);
-        assert toolUpgrade != null;
         var cropMaterials = toolUpgrade.cropMaterials();
         var adjacentCropBlocks = findAdjacentMaterials(cropMaterials, centre, radius, true);
         var replant = toolType.replant;
@@ -496,7 +499,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var particleScale = toolUpgrade.harvestParticleMultiplier;
         FarmingUpgradePlugin.breakBlockEffect(block, state, Sound.BLOCK_CROP_BREAK, particleScale);
         block.setType(Material.AIR);
-
         // A seed that can replant the crop.
         @Nullable ItemStack foundSeed = null;
         GameMode mode = player.getGameMode();
@@ -556,20 +558,15 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                             callingBlockPlaceEvent = false;
                             if (plantEvent.isCancelled() || !plantEvent.canBuild()) {
                                 replacedState.update();
-                                if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
+                                if (drop) dropItem(block, finalFoundSeed);
                             } else {
                                 if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
                             }
                         } else {
-                            if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
+                            if (drop) dropItem(block, finalFoundSeed);
                         }
                     } else {
-                        if (block.isEmpty()) {
-                            block.setType(state.getType());
-                            if (replantParticlesMultiplier > 0.0) fertiliseEffect(block, replantParticlesMultiplier);
-                        } else {
-                            if (drop) block.getWorld().dropItemNaturally(block.getLocation(), finalFoundSeed);
-                        }
+                        if (drop) dropItem(block, finalFoundSeed);
                     }
                 }, delay);
             }
@@ -895,7 +892,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     /**
      * A fertilise event is either called by the server when a player tries to fertilise a crop, or by the plugin.
      */
-    @EventHandler(priority = EventPriority.LOWEST)
+    @EventHandler(priority = EventPriority.LOWEST) //TODO: Do not fully grow the fertilised crop until all other crops in radius is fully grown
     void onFertilise(BlockFertilizeEvent e) {
         if (bonemealUpgrade == null) return; // Only handle if upgraded fertilisation is enabled.
         if (callingFertiliseEvent) return; // Do not handle delegated BlockFertilizeEvents.
@@ -906,10 +903,6 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         // Find adjacent fertilisable crops, send a BlockFertilizeEvent for them and apply fertiliser if the event is successful.
         var fertilisedBlocks = new ArrayList<>(findAdjacentMaterials(bonemealUpgrade.fertilisableMaterials(), block, radius, true));
         Collections.shuffle(fertilisedBlocks, random);
-
-
-
-
         var trials = bonemealUpgrade.trials;
         var particleMultiplier = bonemealUpgrade.fertiliseParticleMultiplier;
         var creative = e.getPlayer().getGameMode() == GameMode.CREATIVE;
@@ -928,9 +921,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             // If the event is allowed, apply fertiliser.
             if (upgradedEvent.isCancelled()) fertilisedBlocks.remove(fertilisedBlock);
         }
-
         var targetGrowthStages = bonemealUpgrade.targetGrowthStages;
-
         Runnable fertiliseTask = () -> {
             var remainingGrowthStages = targetGrowthStages;
             for (var fertilisedBlock : fertilisedBlocks) {
@@ -950,11 +941,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             }
             // Drop a bonemeal if there was no change. Only if player is not in creative.
             if (remainingGrowthStages == targetGrowthStages && !creative) {
-                var dropLocation = fertilisedBlocks.get(fertilisedBlocks.size() - 1).getLocation().add(0.5, 0.5, 0.5);
-                var world = dropLocation.getWorld();
-                if (world == null) return;
-                world.dropItemNaturally(dropLocation, new ItemStack(Material.BONE_MEAL));
-                world.playSound(dropLocation, Sound.ENTITY_ITEM_PICKUP, 1.0f, 0.8f + random.nextFloat() * 0.4f);
+                dropItem(fertilisedBlocks.get(fertilisedBlocks.size() - 1), new ItemStack(Material.BONE_MEAL));
             }
         };
         var delayRange = bonemealUpgrade.maximumDelay - bonemealUpgrade.minimumDelay;
@@ -967,6 +954,14 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 FarmingUpgradePlugin.fertiliseEffect(fertilisedBlock, 0.5 * particleMultiplier);
             }
         }
+    }
+
+    void dropItem(Block block, ItemStack itemStack) {
+        var dropLocation = block.getLocation();
+        var world = dropLocation.getWorld();
+        if (world == null) return;
+        world.dropItemNaturally(dropLocation, itemStack);
+        world.playSound(dropLocation, Sound.ENTITY_ITEM_PICKUP, 1.0f, 0.8f + random.nextFloat() * 0.4f);
     }
 
     /*

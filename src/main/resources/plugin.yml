@@ -1,7 +1,7 @@
 name: FarmingUpgrade
 author: Torm
 description: Upgraded farming mechanics.
-version: 1.3.7
+version: 1.4.0
 main: no.hyp.farmingupgrade.FarmingUpgradePlugin
 api-version: 1.16
 permissions:
