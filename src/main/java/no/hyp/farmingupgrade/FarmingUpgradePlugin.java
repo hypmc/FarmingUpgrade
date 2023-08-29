@@ -905,7 +905,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         Collections.shuffle(fertilisedBlocks, random);
         var trials = bonemealUpgrade.trials;
         var particleMultiplier = bonemealUpgrade.fertiliseParticleMultiplier;
-        var creative = e.getPlayer().getGameMode() == GameMode.CREATIVE;
+        var player = e.getPlayer();
+        var creative = player != null && player.getGameMode() == GameMode.CREATIVE;
         // Remove a bonemeal if not in creative.
         if (e.getPlayer() != null && !creative) {
             PlayerInventory inventory = e.getPlayer().getInventory();
