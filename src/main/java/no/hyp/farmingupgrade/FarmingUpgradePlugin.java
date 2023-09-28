@@ -621,6 +621,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var crop = event.getBlock(); // The block/blockState is updated before the event is called. If the event is cancelled, the blockState is reverted to the original. That is why the planting task is delayed by 1 tick.
         var cropType = crop.getType();
         if (!toolUpgrade.isCrop(cropType)) return;
+        var soilType = crop.getRelative(0, -1, 0).getType();
         var player = event.getPlayer();
         // Try to find a tool in the mainhand or offhand.
         @Nullable HarvestToolType tool;
@@ -656,17 +657,17 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             }
             if (foundItem == null) return; // Cancel if the tool cannot be found.
             var centre = crop.getRelative(0, -1, 0);
-            if (centre.getType() != Material.FARMLAND) return;
+            if (centre.getType() != soilType) return;
             var radius = calculateRadius(tool, toolItem);
-            var farmlands = findAdjacentMaterials(List.of(Material.FARMLAND), centre, radius, false);
+            var soilBlocks = findAdjacentMaterials(List.of(soilType), centre, radius, false);
             var particleMultiplier = toolUpgrade.plantParticleMultiplier;
             var creative = player.getGameMode() == GameMode.CREATIVE;
-            for (var farmland : farmlands) {
-                var aboveFarmland = farmland.getRelative(0, 1, 0);
-                if (aboveFarmland.getType() != Material.AIR) continue;
-                var placeEvent = new BlockPlaceEvent(aboveFarmland, aboveFarmland.getState(), farmland, event.getItemInHand(), player, event.canBuild()); //TODO canBuild
-                var savedState = aboveFarmland.getState();
-                aboveFarmland.setType(cropType);
+            for (var soil : soilBlocks) {
+                var aboveSoil = soil.getRelative(0, 1, 0);
+                if (aboveSoil.getType() != Material.AIR) continue;
+                var placeEvent = new BlockPlaceEvent(aboveSoil, aboveSoil.getState(), soil, event.getItemInHand(), player, event.canBuild()); //TODO canBuild
+                var savedState = aboveSoil.getState();
+                aboveSoil.setType(cropType);
                 callingBlockPlaceEvent = true;
                 getServer().getPluginManager().callEvent(placeEvent);
                 callingBlockPlaceEvent = false;
@@ -675,7 +676,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     continue;
                 }
                 if (!creative) inventory.removeItem(seedItem.clone()); // Remove the planted seed. Clone in case server implementation reduces amount.
-                FarmingUpgradePlugin.fertiliseEffect(aboveFarmland, particleMultiplier);
+                FarmingUpgradePlugin.fertiliseEffect(aboveSoil, particleMultiplier);
                 if (!creative && !inventory.containsAtLeast(seedItem, 1)) break; // Break if there are no more seeds left.
             }
             FarmingUpgradePlugin.fertiliseEffect(crop, particleMultiplier); // Particles for centre crop.
