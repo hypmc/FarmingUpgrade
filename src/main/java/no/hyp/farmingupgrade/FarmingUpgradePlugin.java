@@ -25,6 +25,7 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.inventory.meta.Damageable;
 import org.bukkit.permissions.*;
+import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.util.Vector;
@@ -189,18 +190,19 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             @Nullable var materialString = toolSection.getString("material", null);
             @Nullable var material = materialString != null ? Material.matchMaterial(materialString) : null;
             @Nullable var lore = toolSection.getString("lore", null);
+            @Nullable var nbtTag = toolSection.getString("nbt", null);
             @Nullable var permission = toolSection.getString("permission", null);
             var radius = toolSection.getDouble("radius", 0);
             var damage = toolSection.getInt("damage", 1);
             var replant = toolSection.getBoolean("replant", replantDefault);
             var collect = toolSection.getBoolean("collect", collectDefault);
             var plant = toolSection.getBoolean("plant", plantDefault);
-            tools.add(new HarvestToolType(material, lore, permission, radius, damage, replant, collect, plant));
+            tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant));
         }
         return tools;
     }
 
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant) { }
+    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String nbtTag, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant) { }
 
     static ImmutableList<ReplantableCrop> readCrops(ConfigurationSection configuration) {
         var crops = new LinkedList<ReplantableCrop>();
@@ -281,8 +283,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             boolean toolSwingParticleEffect
     ) {
 
-        public Optional<HarvestToolType> toolType(Player player, ItemStack toolItem) {
-            var potentialTools = toolType(toolItem);
+        public Optional<HarvestToolType> toolType(FarmingUpgradePlugin plugin, Player player, ItemStack toolItem) {
+            var potentialTools = toolType(plugin, toolItem);
             for (var tool : potentialTools) {
                 @Nullable var permission = tool.permission;
                 if (permission == null) return Optional.of(tool);
@@ -291,7 +293,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             return Optional.empty();
         }
 
-        public LinkedList<HarvestToolType> toolType(ItemStack toolItem) {
+        public LinkedList<HarvestToolType> toolType(FarmingUpgradePlugin plugin, ItemStack toolItem) {
             var list = new LinkedList<HarvestToolType>();
             for (var toolType : tools) {
                 // If the type has a material, the item must be of the same material.
@@ -305,6 +307,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 @Nullable var lore = toolType.lore();
                 if (lore != null) {
                     if (!toolItem.hasItemMeta()) continue;
+                    assert toolItem.getItemMeta() != null;
                     @Nullable var itemLore = toolItem.getItemMeta().getLore();
                     if (itemLore == null) continue;
                     var foundLore = false;
@@ -315,6 +318,19 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                         }
                     }
                     if (!foundLore) continue;
+                }
+                // If the tool has an NBT tag filter, the NBT tag on the item must be set to true.
+                @Nullable var nbtTag = toolType.nbtTag();
+                if (nbtTag != null) {
+                    if (!toolItem.hasItemMeta()) continue;
+                    assert toolItem.getItemMeta() != null;
+                    var itemNbt = toolItem.getItemMeta().getPersistentDataContainer();
+                    var namespace = NamespacedKey.fromString(nbtTag, plugin);
+                    assert namespace != null;
+                    if (!itemNbt.has(namespace, PersistentDataType.BYTE)) continue;
+                    var tag = itemNbt.get(namespace, PersistentDataType.BYTE);
+                    assert tag != null;
+                    if (tag == 0) continue;
                 }
                 list.add(toolType);
             }
@@ -410,7 +426,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         if (!toolUpgrade.isCrop(centre.getType())) return; // Farming only applies to crops.
         var toolItem = player.getInventory().getItemInMainHand();
         @Nullable HarvestToolType toolType = null;
-        for (var maybeToolType : toolUpgrade.toolType(toolItem)) {
+        for (var maybeToolType : toolUpgrade.toolType(this, toolItem)) {
             @Nullable var permissionString = maybeToolType.permission();
             if (permissionString == null) {
                 toolType = maybeToolType;
@@ -628,13 +644,13 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         ItemStack toolItem;
         {
             var mainHand = player.getInventory().getItemInMainHand();
-            var mainHandTool = toolUpgrade.toolType(player, mainHand).orElse(null);
+            var mainHandTool = toolUpgrade.toolType(this, player, mainHand).orElse(null);
             if (mainHandTool != null) {
                 toolItem = mainHand.clone();
                 tool = mainHandTool;
             } else {
                 var offHand = player.getInventory().getItemInOffHand();
-                tool = toolUpgrade.toolType(player, offHand).orElse(null);
+                tool = toolUpgrade.toolType(this, player, offHand).orElse(null);
                 toolItem = offHand.clone();
             }
         }
@@ -777,10 +793,10 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     /**
      * BlockGrowEvent is called when a crop grows.
-     *
+     * <p>
      * Minecraft does not send any events for fully hydrated Farmland within the Vanilla water range.
      * Use BlockGrowEvents to create events for fully hydrated Farmland to use upgraded hydration mechanics.
-     *
+     * <p>
      * Minecraft does not dry Farmland into Dirt if there is a crop on it, and thus do not send
      * any events either. Use the grow event to update the Farmland moisture.
      */
@@ -973,9 +989,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     /**
      * A PlayerInteractEvent is called for farmland when it is trampled by a player, which happens when a player jumps
      * on the farmland. It is also sometimes called from the plugin itself.
-     *
+     * <p>
      * When called by the server, the server will call a BlockFadeEvent afterwards.
-     *
+     * <p>
      * If upgraded trampling is not enabled, do not handle this event.
      */
     @EventHandler(priority = EventPriority.LOWEST)
@@ -1087,12 +1103,14 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     static void breakBlockEffect(Block block, BlockState state, Sound sound, int radius, double particleScale) {
         var particles = (10 * (2 * radius + 1)) / (4 * radius * radius + 4 * radius + 1);
         var location = block.getLocation().add(0.5, 0.5, 0.5);
+        assert location.getWorld() != null;
         location.getWorld().spawnParticle(Particle.BLOCK_CRACK, location, (int) (particles * particleScale), 0.5, 0.5, 0.5, state.getBlockData());
         location.getWorld().playSound(location, sound, 1, 1);
     }
 
     static void fertiliseEffect(Block block, double particleScale) {
         var location = block.getLocation().add(0.5, 0.5, 0.375);
+        assert location.getWorld() != null;
         location.getWorld().spawnParticle(Particle.COMPOSTER, location, (int) (15 * particleScale), 0.4, 0.4, 0.35);
     }
 
@@ -1107,7 +1125,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
     boolean damageTool(Random random, Player player, ItemStack tool, int damage, boolean applyUnbreaking) {
         if (!(player.getGameMode() == GameMode.SURVIVAL || player.getGameMode() == GameMode.ADVENTURE)) return false;
         if (tool.getType().isAir()) return false;
-        var itemMeta = tool.getItemMeta();
+        @Nullable var itemMeta = tool.getItemMeta();
+        if (itemMeta == null) return false;
         if (itemMeta.isUnbreakable()) return false;
         if (tool.getType().getMaxDurability() == 0) return false; // Check if the item is a regular item, as opposed to a tool/weapon.
         if (applyUnbreaking) {

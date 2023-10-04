@@ -59,6 +59,9 @@ toolUpgrade:
   # - material: String/Material. The item must have this material. Remove to allow any material.
   # - lore: String. The item must have this string [as a substring, somewhere] in its lore. Remove to allow any lore.
   # - permission: String/Permission. The user must have this permission. Remove to allow any permissions.
+  # - nbt: String. The item must have this FarmingUpgrade NBT-tag set to true. Remove to allow any NBT-tags.
+  #   Example: If "nbt: golden", then the NBT-tag PublicBukkitValues/"farmingupgrade:golden" must be set to true (nonzero byte).
+  #   Such an item can be created with the command [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
   #
   # Tool features:
   # - radius: Decimal. Base tool radius. Total radius may be affected by other modifiers. The total radius is rounded down. 0 radius means that only the clicked block is affected.
