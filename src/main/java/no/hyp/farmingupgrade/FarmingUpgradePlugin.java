@@ -172,7 +172,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         var replantDefault = configuration.getBoolean("toolUpgrade.replantDefault");
         var collectDefault = configuration.getBoolean("toolUpgrade.collectDefault");
         var plantDefault = configuration.getBoolean("toolUpgrade.plantDefault");
-        var tools = readTools(configuration, replantDefault, collectDefault, plantDefault);
+        var damageDefault = configuration.getInt("toolUpgrade.damageDefault");
+        var tools = readTools(configuration, replantDefault, collectDefault, plantDefault, damageDefault);
         var crops = readCrops(configuration);
         return new ToolUpgrade(
                 tools, crops, radiusPerEfficiencyLevel, applyUnbreaking, onlyHarvestMature, minimumReplantDelay,
@@ -181,40 +182,80 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         );
     }
 
-    List<HarvestToolType> readTools(Configuration configuration, boolean replantDefault, boolean collectDefault, boolean plantDefault) {
+    List<HarvestToolType> readTools(Configuration configuration, boolean replantDefault, boolean collectDefault, boolean plantDefault, int damageDefault) {
         var tools = new LinkedList<HarvestToolType>();
         var toolSectionMaps = (List<Map<?, ?>>) configuration.getList("toolUpgrade.tools");
         assert toolSectionMaps != null;
         for (var toolSectionMap : toolSectionMaps) {
             var toolSection = new MemoryConfiguration().createSection("section", toolSectionMap);
-            @Nullable var materialString = toolSection.getString("material", null);
-            @Nullable var material = materialString != null ? Material.matchMaterial(materialString) : null;
+            @Nullable var material = readMaterialStringOrList(toolSection, "material").orElse(null);
             @Nullable var lore = toolSection.getString("lore", null);
             @Nullable var nbtTag = toolSection.getString("nbt", null);
             @Nullable var permission = toolSection.getString("permission", null);
             var radius = toolSection.getDouble("radius", 0);
-            var damage = toolSection.getInt("damage", 1);
+            var damage = toolSection.getInt("damage", damageDefault);
             var replant = toolSection.getBoolean("replant", replantDefault);
             var collect = toolSection.getBoolean("collect", collectDefault);
             var plant = toolSection.getBoolean("plant", plantDefault);
-            tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant));
+            @Nullable var speciality = readMaterialStringOrList(toolSection, "speciality").orElse(null);
+            tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant, speciality));
         }
         return tools;
     }
 
-    record HarvestToolType(@Nullable Material material, @Nullable String lore, @Nullable String nbtTag, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant) { }
+    Optional<List<Material>> readMaterialStringOrList(ConfigurationSection section, String key) {
+        if (section.contains(key)) {
+            if (section.isString(key)) {
+                var materialString = section.getString(key);
+                assert materialString != null;
+                @Nullable var material = Material.matchMaterial(materialString);
+                if (material == null) {
+                    this.getLogger().severe(materialString + " is not a valid tool material.");
+                    return Optional.empty();
+                }
+                return Optional.of(List.of(material));
+            } else {
+                if (!section.isList(key)) {
+                    this.getLogger().severe("Configuration error: material must be a string or a list of materials.");
+                    return Optional.empty();
+                }
+                var l = section.getStringList(key);
+                var m = new ArrayList<Material>();
+                for (var materialString : l) {
+                    @Nullable var material = Material.matchMaterial(materialString);
+                    if (material == null) {
+                        this.getLogger().severe(materialString + " is not a valid tool material.");
+                        continue;
+                    }
+                    m.add(material);
+                }
+                return Optional.of(m);
+            }
+        } else {
+            return Optional.empty();
+        }
+    }
 
-    static ImmutableList<ReplantableCrop> readCrops(ConfigurationSection configuration) {
+    record HarvestToolType(@Nullable List<Material> material, @Nullable String lore, @Nullable String nbtTag, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant, @Nullable List<Material> speciality) { }
+
+    ImmutableList<ReplantableCrop> readCrops(ConfigurationSection configuration) {
         var crops = new LinkedList<ReplantableCrop>();
         var cropSectionMaps = (List<Map<?, ?>>) configuration.getList("toolUpgrade.crops");
         assert cropSectionMaps != null;
         for (var cropSectionMap : cropSectionMaps) {
             var cropSection = new MemoryConfiguration().createSection("section", cropSectionMap);
-            var cropName = cropSection.getString("crop");
-            assert cropName != null;
-            var cropMaterial = Material.matchMaterial(cropName);
-            @Nullable var seedsName = cropSection.getString("seeds");
-            @Nullable var seedsMaterial = seedsName != null ? Material.matchMaterial(seedsName) : null;
+            var cropString = cropSection.getString("crop");
+            assert cropString != null;
+            @Nullable var cropMaterial = Material.matchMaterial(cropString);
+            if (cropMaterial == null) this.getLogger().severe(cropString + " is not a valid crop material.");
+            @Nullable var seedsString = cropSection.getString("seeds");
+            @Nullable Material seedsMaterial;
+            if (seedsString != null) {
+                seedsMaterial = Material.matchMaterial(seedsString);
+                if (seedsMaterial == null) this.getLogger().severe(seedsString + " is not a valid seeds material.");
+            } else {
+                seedsMaterial = null;
+            }
             crops.add(new ReplantableCrop(cropMaterial, seedsMaterial));
         }
         return ImmutableList.copyOf(crops);
@@ -283,25 +324,13 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             boolean toolSwingParticleEffect
     ) {
 
-        public Optional<HarvestToolType> toolType(FarmingUpgradePlugin plugin, Player player, ItemStack toolItem) {
-            var potentialTools = toolType(plugin, toolItem);
-            for (var tool : potentialTools) {
-                @Nullable var permission = tool.permission;
-                if (permission == null) return Optional.of(tool);
-                if (player.hasPermission(permission)) return Optional.of(tool);
-            }
-            return Optional.empty();
-        }
-
-        public LinkedList<HarvestToolType> toolType(FarmingUpgradePlugin plugin, ItemStack toolItem) {
+        Optional<HarvestToolType> toolType(FarmingUpgradePlugin plugin, ItemStack toolItem, Player player, Material crop) {
             var list = new LinkedList<HarvestToolType>();
             for (var toolType : tools) {
                 // If the type has a material, the item must be of the same material.
                 @Nullable var typeMaterial = toolType.material();
                 if (typeMaterial != null) {
-                    if (typeMaterial != toolItem.getType()) {
-                        continue;
-                    }
+                    if (!typeMaterial.contains(toolItem.getType())) continue;
                 }
                 // If the type has a lore, some line in the item lore must contain the type lore as a substring.
                 @Nullable var lore = toolType.lore();
@@ -332,9 +361,19 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     assert tag != null;
                     if (tag == 0) continue;
                 }
-                list.add(toolType);
+                @Nullable var permissionString = toolType.permission();
+                if (permissionString != null) {
+                    @Nullable Permission permission = Bukkit.getServer().getPluginManager().getPermission(permissionString);
+                    if (permission == null) continue; // The permission does not exist.
+                    if (!player.hasPermission(permission)) continue;
+                }
+                @Nullable var specialty = toolType.speciality();
+                if (specialty != null) {
+                    if (!specialty.contains(crop)) continue;
+                }
+                return Optional.of(toolType);
             }
-            return list;
+            return Optional.empty();
         }
 
         public boolean isCrop(Material type) {
@@ -423,22 +462,10 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         if (callingBlockBreakEvent) return; // Do not handle events that are called by FarmingUpgrade.
         var player = event.getPlayer();
         var centre = event.getBlock();
-        if (!toolUpgrade.isCrop(centre.getType())) return; // Farming only applies to crops.
+        var material = centre.getType();
+        if (!toolUpgrade.isCrop(material)) return; // Farming only applies to crops.
         var toolItem = player.getInventory().getItemInMainHand();
-        @Nullable HarvestToolType toolType = null;
-        for (var maybeToolType : toolUpgrade.toolType(this, toolItem)) {
-            @Nullable var permissionString = maybeToolType.permission();
-            if (permissionString == null) {
-                toolType = maybeToolType;
-                break;
-            }
-            @Nullable Permission permission = getServer().getPluginManager().getPermission(permissionString);
-            if (permission == null) continue; // The player does not have the tool permission because it does not exist.
-            if (player.hasPermission(permission)) {
-                toolType = maybeToolType;
-                break;
-            }
-        }
+        @Nullable HarvestToolType toolType = toolUpgrade.toolType(this, toolItem, player, material).orElse(null);
         if (toolType == null) return; // If the crop was not broken by a harvest tool, proceed with Vanilla mechanics.
         event.setCancelled(true); // Cancel the Vanilla event to cancel the Vanilla mechanics.
         initiateHarvest(player, toolType, toolItem, centre);
@@ -452,7 +479,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         if (toolUpgrade.toolSwingParticleEffect()) harvestSwingParticles(player);
         var toolDamage = toolType.damage();
         var radius = calculateRadius(toolType, toolItem);
-        var cropMaterials = toolUpgrade.cropMaterials();
+        var cropMaterials = toolType.speciality() != null ? toolType.speciality() : toolUpgrade.cropMaterials();
         var adjacentCropBlocks = findAdjacentMaterials(cropMaterials, centre, radius, true);
         var replant = toolType.replant;
         var applyUnbreaking = toolUpgrade.applyUnbreaking;
@@ -644,13 +671,13 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         ItemStack toolItem;
         {
             var mainHand = player.getInventory().getItemInMainHand();
-            var mainHandTool = toolUpgrade.toolType(this, player, mainHand).orElse(null);
+            var mainHandTool = toolUpgrade.toolType(this, mainHand, player, cropType).orElse(null);
             if (mainHandTool != null) {
                 toolItem = mainHand.clone();
                 tool = mainHandTool;
             } else {
                 var offHand = player.getInventory().getItemInOffHand();
-                tool = toolUpgrade.toolType(this, player, offHand).orElse(null);
+                tool = toolUpgrade.toolType(this, offHand, player, cropType).orElse(null);
                 toolItem = offHand.clone();
             }
         }

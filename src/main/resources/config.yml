@@ -37,8 +37,10 @@ toolUpgrade:
   # Dropped items from crops broken by a hoe are collected in the player's inventory if there is space.
   # This is a default value for every tool. This can be overridden by specific tool properties.
   collectDefault: false
-  # Determines if a tool can plant seeds on all empty farmland within the tool radius by default.
+  # Determines if a tool can plant seeds on all empty farmland within the tool radius by default. This can be overridden by specific tool properties.
   plantDefault: true
+  # Default damage that a tool takes when harvesting crops. This can be overridden by specific tool properties.
+  damageDefault: 1
   # A list of crops and their seeds.
   crops:
     - crop: WHEAT
@@ -56,12 +58,13 @@ toolUpgrade:
   # The first (ordered from top to bottom) tool with filters allowing an item, is the one that is used to determine the item's tool features. If no tool matches an item, then the item is not a harvesting tool.
   #
   # Tool filters:
-  # - material: String/Material. The item must have this material. Remove to allow any material.
+  # - material: String/Material OR List of Materials. The tool must be of one of these materials. Remove to allow any material.
   # - lore: String. The item must have this string [as a substring, somewhere] in its lore. Remove to allow any lore.
   # - permission: String/Permission. The user must have this permission. Remove to allow any permissions.
   # - nbt: String. The item must have this FarmingUpgrade NBT-tag set to true. Remove to allow any NBT-tags.
   #   Example: If "nbt: golden", then the NBT-tag PublicBukkitValues/"farmingupgrade:golden" must be set to true (nonzero byte).
   #   Such an item can be created with the command [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
+  # - speciality: String/Material OR List of Materials. An exclusive list of crops that this tool can be applied to. Remove to apply tool to any crop.
   #
   # Tool features:
   # - radius: Decimal. Base tool radius. Total radius may be affected by other modifiers. The total radius is rounded down. 0 radius means that only the clicked block is affected.
@@ -75,73 +78,59 @@ toolUpgrade:
     #
     #    - permission: farmer
     #      radius: 1.5
-    #      damage: 1
 
     # Fake lore enchantments
     #
     #    - lore: Harvest I
     #      radius: 1.5
-    #      damage: 1
     #    - lore: Harvest II
     #      radius: 2.5
-    #      damage: 1
 
-    # Example of permission disabling replant for wooden hoes.
+    # Example of permission enabling replant for wooden hoes.
     #
     #    - material: WOODEN_HOE
+    #      permission: replant
     #      radius: 0.5
-    #      damage: 1
-    #      permission: noreplant
-    #      replant: false
-    #
-    #    - material: WOODEN_HOE
-    #      radius: 0.5
-    #      damage: 1
     #      replant: true
+    #
+    #    - material: WOODEN_HOE
+    #      radius: 0.5
+    #      replant: false
 
     # Example of tool that can plant seeds.
+    #
     #    - material: IRON_HOE
     #      radius: 1.5
-    #      damage: 1
     #      plant: true
+
+    # Example of a tool that only harvests, plants and collects potatoes, carrots and beetroots.
+    #
+    #    - nbt: earth
+    #      speciality: [POTATOES, CARROTS, BEETROOTS]
+    #      radius: 1.5
+    #      collect: true
+    #
+    #    - nbt: earth
+    #      radius: 0
+    #      replant: false
+    #      plant: false
 
     # Hoes
     - material: WOODEN_HOE
       radius: 0.5
-      damage: 1
     - material: STONE_HOE
       radius: 0.5
-      damage: 1
     - material: IRON_HOE
       radius: 1.5
-      damage: 1
     - material: GOLDEN_HOE
       radius: 1.5
-      damage: 1
     - material: DIAMOND_HOE
       radius: 2.5
-      damage: 1
     - material: NETHERITE_HOE
       radius: 2.5
-      damage: 1
 
     # Swords
-    - material: WOODEN_SWORD
-      radius: 0
-      damage: 2
-    - material: STONE_SWORD
-      radius: 0
-      damage: 2
-    - material: IRON_SWORD
-      radius: 0
-      damage: 2
-    - material: GOLDEN_SWORD
-      radius: 0
-      damage: 2
-    - material: DIAMOND_SWORD
-      radius: 0
-      damage: 2
-    - material: NETHERITE_SWORD
+    - material: [WOODEN_SWORD, STONE_SWORD, IRON_SWORD, GOLDEN_SWORD, DIAMOND_SWORD, NETHERITE_SWORD]
       radius: 0
       damage: 2
 
