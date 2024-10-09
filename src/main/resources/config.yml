@@ -64,7 +64,7 @@ toolUpgrade:
   # - nbt: String. The item must have this FarmingUpgrade NBT-tag set to true. Remove to allow any NBT-tags.
   #   Example: If "nbt: golden", then the NBT-tag PublicBukkitValues/"farmingupgrade:golden" must be set to true (nonzero byte).
   #   Such an item can be created with the command [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
-  # - speciality: String/Material OR List of Materials. An exclusive list of crops that this tool can be applied to. Remove to apply tool to any crop.
+  # - crops: String/Material OR List of Materials. An exclusive list of crops that this tool can be applied to. Remove to apply tool to any crop.
   #
   # Tool features:
   # - radius: Decimal. Base tool radius. Total radius may be affected by other modifiers. The total radius is rounded down. 0 radius means that only the clicked block is affected.
@@ -106,7 +106,7 @@ toolUpgrade:
     # Example of a tool that only harvests, plants and collects potatoes, carrots and beetroots.
     #
     #    - nbt: earth
-    #      speciality: [POTATOES, CARROTS, BEETROOTS]
+    #      crops: [POTATOES, CARROTS, BEETROOTS]
     #      radius: 1.5
     #      collect: true
     #
@@ -191,4 +191,4 @@ trampleUpgrade:
   dryEmptyOnTrample: true
   trampleParticleMultiplier: 1.0
   # A list of crops that can be trampled.
-  trampleableCrops: [ WHEAT, MELON_STEM, PUMPKIN_STEM ]
+  trampleableCrops: [WHEAT, MELON_STEM, PUMPKIN_STEM]

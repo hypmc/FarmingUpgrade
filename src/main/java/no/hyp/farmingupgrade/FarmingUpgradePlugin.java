@@ -197,8 +197,11 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             var replant = toolSection.getBoolean("replant", replantDefault);
             var collect = toolSection.getBoolean("collect", collectDefault);
             var plant = toolSection.getBoolean("plant", plantDefault);
-            @Nullable var speciality = readMaterialStringOrList(toolSection, "speciality").orElse(null);
-            tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant, speciality));
+            @Nullable var crops = readMaterialStringOrList(toolSection, "crops").orElse(null);
+            if (crops == null) {
+                crops = readMaterialStringOrList(toolSection, "speciality").orElse(null);
+            }
+            tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant, crops));
         }
         return tools;
     }
@@ -236,7 +239,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         }
     }
 
-    record HarvestToolType(@Nullable List<Material> material, @Nullable String lore, @Nullable String nbtTag, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant, @Nullable List<Material> speciality) { }
+    record HarvestToolType(@Nullable List<Material> material, @Nullable String lore, @Nullable String nbtTag, @Nullable String permission, double radius, int damage, boolean replant, boolean collect, boolean plant, @Nullable List<Material> crops) { }
 
     ImmutableList<ReplantableCrop> readCrops(ConfigurationSection configuration) {
         var crops = new LinkedList<ReplantableCrop>();
@@ -367,9 +370,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     if (permission == null) continue; // The permission does not exist.
                     if (!player.hasPermission(permission)) continue;
                 }
-                @Nullable var specialty = toolType.speciality();
-                if (specialty != null) {
-                    if (!specialty.contains(crop)) continue;
+                @Nullable var crops = toolType.crops();
+                if (crops != null) {
+                    if (!crops.contains(crop)) continue;
                 }
                 return Optional.of(toolType);
             }
@@ -479,7 +482,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         if (toolUpgrade.toolSwingParticleEffect()) harvestSwingParticles(player);
         var toolDamage = toolType.damage();
         var radius = calculateRadius(toolType, toolItem);
-        var cropMaterials = toolType.speciality() != null ? toolType.speciality() : toolUpgrade.cropMaterials();
+        var cropMaterials = toolType.crops() != null ? toolType.crops() : toolUpgrade.cropMaterials();
         var adjacentCropBlocks = findAdjacentMaterials(cropMaterials, centre, radius, true);
         var replant = toolType.replant;
         var applyUnbreaking = toolUpgrade.applyUnbreaking;
@@ -693,7 +696,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             ItemStack foundItem = null;
             for (@Nullable var i : inventory) {
                 if (i == null) continue;
-                if (toolItem.isSimilar(i)) {
+                if (toolItem.equals(i)) {
                     foundItem = i;
                     break;
                 }
@@ -708,9 +711,21 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             for (var soil : soilBlocks) {
                 var aboveSoil = soil.getRelative(0, 1, 0);
                 if (aboveSoil.getType() != Material.AIR) continue;
-                var placeEvent = new BlockPlaceEvent(aboveSoil, aboveSoil.getState(), soil, event.getItemInHand(), player, event.canBuild()); //TODO canBuild
+                if (!creative) { // TODO: Remove after event, but check seed here first as done too
+                    var removed = false;
+                    for (var i : inventory) {
+                        if (i == null) continue;
+                        if (seedItem.isSimilar(i)) {
+                            i.setAmount(i.getAmount() - 1);
+                            removed = true;
+                            break;
+                        }
+                    }
+                    if (!removed) break;
+                }
                 var savedState = aboveSoil.getState();
                 aboveSoil.setType(cropType);
+                var placeEvent = new BlockPlaceEvent(aboveSoil, savedState, soil, event.getItemInHand(), player, event.canBuild()); //TODO canBuild
                 callingBlockPlaceEvent = true;
                 getServer().getPluginManager().callEvent(placeEvent);
                 callingBlockPlaceEvent = false;
@@ -718,9 +733,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                     savedState.update(); // Revert if event was cancelled.
                     continue;
                 }
-                if (!creative) inventory.removeItem(seedItem.clone()); // Remove the planted seed. Clone in case server implementation reduces amount.
                 FarmingUpgradePlugin.fertiliseEffect(aboveSoil, particleMultiplier);
-                if (!creative && !inventory.containsAtLeast(seedItem, 1)) break; // Break if there are no more seeds left.
             }
             FarmingUpgradePlugin.fertiliseEffect(crop, particleMultiplier); // Particles for centre crop.
         }, 1);
