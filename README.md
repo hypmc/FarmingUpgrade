@@ -4,7 +4,7 @@ Upgraded farming mechanics.
 
 ### Compatibility
 
-Tested for Spigot 1.19.2.
+Tested for Spigot 1.21.10.
 
 ### Features
 

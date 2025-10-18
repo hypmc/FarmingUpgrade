@@ -42,6 +42,8 @@ toolUpgrade:
   # Default damage that a tool takes when harvesting crops. This can be overridden by specific tool properties.
   damageDefault: 1
   # A list of crops and their seeds.
+  # When a tool is used to harvest or plant a crop, the crop is replanted or
+  # planted with these seeds using the tool's properties (such as radius).
   crops:
     - crop: WHEAT
       seeds: WHEAT_SEEDS
@@ -53,6 +55,11 @@ toolUpgrade:
       seeds: BEETROOT_SEEDS
     - crop: NETHER_WART
       seeds: NETHER_WART
+#    - crop: TORCHFLOWER_CROP
+#      seeds: TORCHFLOWER_SEEDS
+#    - crop: PITCHER_CROP
+#      seeds: PITCHER_POD
+
   # A list of harvesting tools and their filters and features.
   #
   # The first (ordered from top to bottom) tool with filters allowing an item, is the one that is used to determine the item's tool features. If no tool matches an item, then the item is not a harvesting tool.
@@ -63,7 +70,7 @@ toolUpgrade:
   # - permission: String/Permission. The user must have this permission. Remove to allow any permissions.
   # - nbt: String. The item must have this FarmingUpgrade NBT-tag set to true. Remove to allow any NBT-tags.
   #   Example: If "nbt: golden", then the NBT-tag PublicBukkitValues/"farmingupgrade:golden" must be set to true (nonzero byte).
-  #   Such an item can be created with the command [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
+  #   Such an item can be created with the command [ /give @p golden_hoe[custom_data={PublicBukkitValues:{"farmingupgrade:golden":1b}}] ], in older versions: [ /give @p minecraft:golden_hoe{PublicBukkitValues:{"farmingupgrade:golden":1b}} ].
   # - crops: String/Material OR List of Materials. An exclusive list of crops that this tool can be applied to. Remove to apply tool to any crop.
   #
   # Tool features:
@@ -103,6 +110,12 @@ toolUpgrade:
     #      radius: 1.5
     #      plant: true
 
+    # Example of a special golden hoe that has NBT=golden that harvests in a large radius.
+    #
+    #    - material: GOLDEN_HOE
+    #      nbt: golden
+    #      radius: 6
+
     # Example of a tool that only harvests, plants and collects potatoes, carrots and beetroots.
     #
     #    - nbt: earth
@@ -122,6 +135,8 @@ toolUpgrade:
       radius: 0.5
     - material: IRON_HOE
       radius: 1.5
+    - material: COPPER_HOE
+      radius: 1.5
     - material: GOLDEN_HOE
       radius: 1.5
     - material: DIAMOND_HOE
@@ -130,7 +145,7 @@ toolUpgrade:
       radius: 2.5
 
     # Swords
-    - material: [WOODEN_SWORD, STONE_SWORD, IRON_SWORD, GOLDEN_SWORD, DIAMOND_SWORD, NETHERITE_SWORD]
+    - material: [WOODEN_SWORD, STONE_SWORD, IRON_SWORD, COPPER_SWORD, GOLDEN_SWORD, DIAMOND_SWORD, NETHERITE_SWORD]
       radius: 0
       damage: 2
 
@@ -168,17 +183,21 @@ bonemealUpgrade:
   # A list of fertilisable plants and their expected growth.
   plants:
     - plant: WHEAT
-      growth: 0.50 # Chance of advancing a stage with each trial.
+      growth: 0.50 # Chance of advancing a stage with each trial. Most crops have 8 stages.
     - plant: POTATOES
       growth: 0.50
     - plant: CARROTS
       growth: 0.50
-    - plant: BEETROOTS # All crops have 8 stages, except beetroots which has 4
+    - plant: BEETROOTS # Beetroots have 4 growth stages.
       growth: 0.25
     - plant: MELON_STEM
       growth: 0.50
     - plant: PUMPKIN_STEM
       growth: 0.50
+#    - plant: TORCHFLOWER_CROP # Torchflowers have 5 growth stages
+#      growth: 0.50
+#    - plant: PITCHER_CROP
+#      growth: 0.50
 
 
 # Upgraded crop trampling.

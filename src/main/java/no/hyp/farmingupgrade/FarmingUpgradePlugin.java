@@ -40,7 +40,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
 
     boolean required;
 
-    @Nullable FarmingUpgradePlugin.ToolUpgrade toolUpgrade;
+    @Nullable ToolUpgrade toolUpgrade;
 
     @Nullable HydrationUpgrade hydrationUpgrade;
 
@@ -158,7 +158,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
         this.trampleUpgrade = readTrampleUpgrade(config);
     }
 
-    @Nullable FarmingUpgradePlugin.ToolUpgrade readFarmingToolsUpgrade(Configuration configuration) {
+    @Nullable ToolUpgrade readFarmingToolsUpgrade(Configuration configuration) {
         if (configuration.get("toolUpgrade", null) == null) return null;
         var radiusPerEfficiencyLevel = configuration.getDouble("toolUpgrade.radiusPerEfficiencyLevel");
         var applyUnbreaking = configuration.getBoolean("toolUpgrade.applyUnbreaking");
@@ -198,7 +198,7 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             var collect = toolSection.getBoolean("collect", collectDefault);
             var plant = toolSection.getBoolean("plant", plantDefault);
             @Nullable var crops = readMaterialStringOrList(toolSection, "crops").orElse(null);
-            if (crops == null) {
+            if (crops == null) { // Old value for crops, remove this later
                 crops = readMaterialStringOrList(toolSection, "speciality").orElse(null);
             }
             tools.add(new HarvestToolType(material, lore, nbtTag, permission, radius, damage, replant, collect, plant, crops));
@@ -366,9 +366,9 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
                 }
                 @Nullable var permissionString = toolType.permission();
                 if (permissionString != null) {
-                    @Nullable Permission permission = Bukkit.getServer().getPluginManager().getPermission(permissionString);
-                    if (permission == null) continue; // The permission does not exist.
-                    if (!player.hasPermission(permission)) continue;
+                    // @Nullable Permission permission = Bukkit.getServer().getPluginManager().getPermission(permissionString);
+                    // if (permission == null) continue; // The permission does not exist. // TODO: Just check string, because player specified permission may not be registered.
+                    if (!player.hasPermission(permissionString)) continue;
                 }
                 @Nullable var crops = toolType.crops();
                 if (crops != null) {
@@ -885,7 +885,8 @@ public final class FarmingUpgradePlugin extends JavaPlugin implements Listener {
             if (isHydrated(Lists.newArrayList(Material.WATER), state.getBlock(), range, height, depth)) {
                 BlockData data = state.getBlockData();
                 Farmland farmland = (Farmland) data;
-                farmland.setMoisture(Math.min(farmland.getMoisture() + 1, farmland.getMaximumMoisture()));
+                // farmland.setMoisture(Math.min(farmland.getMoisture() + 1, farmland.getMaximumMoisture()));
+                farmland.setMoisture(farmland.getMaximumMoisture()); // TODO: This is more Vanilla, but above might be cool.
                 state.setBlockData(data);
             } else {
                 BlockData data = state.getBlockData();
